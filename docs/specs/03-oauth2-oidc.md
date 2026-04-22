@@ -1,12 +1,41 @@
 # Auth7 — Spec 03: OAuth2/OIDC
 
 > **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Analogi**: Ory Hydra
 
 ---
 
-## 1. OAuth2 Flows
+## 1. OAuth2 dalam Konteks Core7
 
-### 1.1 Authorization Code Flow + PKCE (Primary)
+Auth7 berfungsi sebagai **Authorization Server** (AS) dalam ekosistem OAuth2:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  OAuth2 Roles                                            │
+│                                                          │
+│  Resource Owner  = User (manusia yang punya akun)        │
+│  Client          = Aplikasi (bos7-portal, mobile app)    │
+│  Authorization   = auth7-svc                             │
+│  Server (AS)                                             │
+│  Resource Server = core7 services (workflow7, dll)       │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Flows yang Didukung
+| Flow | Use Case | Status v1.0 |
+|---|---|---|
+| Authorization Code + PKCE | Browser apps (bos7-portal, auth7-ui) | ✅ |
+| Client Credentials | M2M (service-to-service) | ✅ |
+| Refresh Token | Semua flows | ✅ |
+| Device Authorization | IoT / CLI tools | 🔲 v1.1 |
+| Implicit | Legacy (deprecated) | ❌ disabled |
+| Password Grant | Legacy (deprecated) | ❌ disabled |
+
+---
+
+## 2. OAuth2 Flows
+
+### 2.1 Authorization Code Flow + PKCE (Primary)
 
 Untuk browser apps (bos7-portal, workflow7-web, dll):
 
@@ -71,7 +100,7 @@ Client App              auth7-ui                auth7-svc
   │◄───────────────────────│                       │
 ```
 
-### 1.2 Client Credentials Flow (M2M)
+### 2.2 Client Credentials Flow (M2M)
 
 Untuk service-to-service communication:
 
@@ -89,7 +118,7 @@ grant_type=client_credentials
 - Access token TTL: 15 menit
 - Scope terbatas pada service permissions
 
-### 1.3 Refresh Token Flow
+### 2.3 Refresh Token Flow
 
 ```
 POST /oauth2/token
@@ -213,7 +242,24 @@ type OAuth2Client struct {
 }
 ```
 
-### 4.2 Dynamic Client Registration (RFC 7591)
+### 4.2 Scopes yang Didukung
+
+```
+openid          # Required untuk OIDC (mendapatkan ID Token)
+profile         # username, full_name
+email           # email address
+offline_access  # Mengizinkan refresh token
+roles           # User roles dalam org
+permissions     # User permissions (careful: bisa besar)
+
+# Core7-specific scopes
+workflow7:read   # Read access ke workflow7
+workflow7:write  # Write access ke workflow7
+notif7:read      # Read access ke notif7
+notif7:write     # Write access ke notif7
+```
+
+### 4.3 Dynamic Client Registration (RFC 7591)
 
 ```
 POST /oauth2/register

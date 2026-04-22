@@ -76,7 +76,10 @@
 
 **Q6.1** — Email OTP: masuk v1.0 atau v1.1?
 > ✅ **KEPUTUSAN: Masuk v1.0**
-> Tambahkan ke backlog notif7 untuk email delivery
+> Delivery via **auth7 internal SMTP mailer** (bukan notif7).
+> Email OTP adalah pre-login MFA factor — notif7 membutuhkan user JWT yang sudah aktif,
+> tidak bisa dipakai untuk kirim OTP sebelum user berhasil login.
+> Lihat `06-mfa.md` Section 3 untuk implementasi internal SMTP mailer.
 
 **Q6.2** — Apakah TOTP "trusted device" (skip MFA untuk device yang sama) diperlukan?
 > ✅ **KEPUTUSAN: Tidak**
@@ -148,8 +151,10 @@
 > Sesuai regulasi perbankan Indonesia
 
 **Q11.2** — Apakah perlu webhook ke notif7 untuk critical security events?
-> ✅ **KEPUTUSAN: v1.1**
-> Webhook atau event streaming ke notif7 setelah notif7 ready
+> ✅ **KEPUTUSAN: v1.0** — auth7 sebagai producer ke notif7 (bukan webhook, tapi HTTP event)
+> Event types: `auth.account_locked`, `auth.login_new_device`, `auth.mfa_reset`, `auth.password_changed`
+> notif7 Plan 06 (Email Channel) harus selesai dulu sebelum auth7 onboard.
+> Lihat `09-integration.md` Section 5 dan `06-mfa.md` Section 11.
 
 ### 12. Admin
 
@@ -178,7 +183,7 @@
 - [x] **Q5.2** dijawab → hybrid JSON Rules + OPA Rego
 - [x] **Q5.3** dijawab → Redis pub/sub untuk policy sync
 - [x] **Q5.4** dijawab → wildcard permissions untuk admin
-- [x] **Q6.1** dijawab → email OTP masuk v1.0 (backlog notif7)
+- [x] **Q6.1** dijawab → email OTP masuk v1.0 via auth7 internal SMTP mailer (bukan notif7)
 - [x] **Q6.2** dijawab → tidak ada trusted device
 - [x] **Q7.1** dijawab → max concurrent sessions configurable per org
 - [x] **Q7.2** dijawab → soft IP binding (warn saja)
@@ -192,7 +197,7 @@
 - [x] **Q10.2** dijawab → pentest wajib
 - [x] **Q10.3** dijawab → WAF di infrastructure level
 - [x] **Q11.1** dijawab → 5 tahun retention
-- [x] **Q11.2** dijawab → webhook notif7 di v1.1
+- [x] **Q11.2** dijawab → security alert producer events ke notif7 v1.0 (Plan 06)
 - [x] **Q12.1** dijawab → dual approval di v2.0 via workflow7
 - [x] **Q12.2** dijawab → admin rate limiting lebih ketat (10 req/s)
 - [x] Specs recreated (11 files, 00-10)
@@ -210,10 +215,10 @@
 | **UI** | `ihsansolusi/auth7-ui` (repo terpisah), playground reset dari awal |
 | **Infrastructure** | PostgreSQL 16 + Redis (wajib) |
 | **Identity** | Username/password, bulk import CSV, soft delete langsung |
-| **Auth Flows** | Login, logout, register, recovery, email OTP |
+| **Auth Flows** | Login, logout, register, recovery, email OTP (via internal SMTP) |
 | **OAuth2/OIDC** | Auth code + PKCE, client credentials, DCR (RFC 7591), JWT + opaque token |
 | **Token** | Access 15 menit, Refresh 8 jam |
-| **MFA** | TOTP (setiap login, no trusted device), email OTP |
+| **MFA** | TOTP (setiap login, no trusted device), email OTP (internal SMTP) |
 | **Authorization** | RBAC + ABAC (JSON + Rego hybrid), Casbin custom pgx, wildcard admin |
 | **Session** | Configurable max concurrent per org, soft IP binding |
 | **Admin API** | CRUD user/role/client, rate limiting 10 req/s |
@@ -227,7 +232,7 @@
 | **Identity** | User impersonation | v1.1 |
 | **Security** | HSM untuk JWT key | v2.0 |
 | **OAuth2** | Consent screen | v2.0 |
-| **Audit** | Webhook ke notif7 | v1.1 |
+| **notif7 integration** | Security alert producer events (account_locked, mfa_reset, dll) | v1.0 (notif7 Plan 06) |
 | **Admin** | Dual approval (4-eyes) | v2.0 via workflow7 |
 
 ---

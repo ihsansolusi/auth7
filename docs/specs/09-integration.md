@@ -189,15 +189,32 @@ router.POST("/flows", auth7.RequirePermission("flow:create"), flowHandler.Create
 
 ### 4.2 notif7-svc
 
-```go
-// M2M communication
-client := auth.NewClientCredentialsClient(auth7TokenURL, clientID, clientSecret)
-token, err := client.GetToken(ctx, "service:read service:write")
+auth7-svc bertindak sebagai **producer** ke notif7 — bukan consumer. auth7 mengirim security alert events
+setelah terjadi event keamanan penting (post-login). notif7 kemudian mengdeliver via in-app SSE + email.
 
-// Use token for API calls
-req, _ := http.NewRequest("GET", notif7URL+"/inbox", nil)
-req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+```go
+// internal/security/alert_dispatcher.go
+// auth7-svc mengirim security alerts ke notif7 sebagai producer
+
+notif7Client := notif7client.New(cfg.Notif7.BaseURL, cfg.Notif7.APIKey)
+
+// Contoh: account locked event
+_ = notif7Client.Send(ctx, notif7client.Event{
+    Source:           "auth7",
+    EventType:        "auth.account_locked",
+    UserIDs:          []string{userID},
+    EmailAddresses:   []string{userEmail},  // auth7 mengetahui email dari DB
+    DeliveryChannels: []string{"in_app", "email"},
+    Title:            "Akun Anda dikunci sementara",
+    Body:             "Terdeteksi 5x percobaan login gagal. Akun dikunci 15 menit.",
+    RefURL:           "/profile/security",
+})
 ```
+
+**Catatan arsitektur:**
+- Email OTP / verification / recovery: tetap via auth7 internal SMTP (pre-login, tidak perlu notif7)
+- Security alerts: via notif7 producer events (post-login, user_id tersedia)
+- Dependency satu arah: auth7 → notif7 (tidak ada callback / circular dependency)
 
 ### 4.3 bos7-portal (Next.js)
 
@@ -224,14 +241,25 @@ export async function middleware(request: NextRequest) {
 
 ---
 
-## 5. Webhook ke Notif7 (v1.1)
+## 5. Security Alerts ke Notif7 (v1.0)
 
-- v1.0: Tidak ada webhook
-- v1.1: Webhook atau event streaming ke notif7 untuk critical security events
-  - Login dari device baru
-  - MFA reset
-  - Account locked
-  - Suspicious activity
+auth7-svc mengirim security alert events ke notif7 sebagai HTTP producer (bukan webhook).
+Ini sudah masuk scope **v1.0** bersamaan dengan notif7 Plan 06 (Email Channel).
+
+| EventType | Delivery |
+|---|---|
+| `auth.login_new_device` | in_app + email |
+| `auth.account_locked` | in_app + email |
+| `auth.mfa_reset` | in_app + email |
+| `auth.password_changed` | in_app only |
+
+Setup auth7 sebagai notif7 producer:
+1. Dapatkan notif7 API key (producer JWT, issued by devops)
+2. Set env: `NOTIF7_BASE_URL=http://notif7-svc:8082`, `NOTIF7_API_KEY=<jwt>`
+3. Copy `pkg/notif7client/client.go` dari notif7 ke auth7 codebase
+4. Wire `SecurityAlertDispatcher` di DI (cmd/)
+
+Lihat detail implementasi di `06-mfa.md` Section 11.
 
 ---
 

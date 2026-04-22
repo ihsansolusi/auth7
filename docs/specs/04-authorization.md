@@ -1,6 +1,7 @@
 # Auth7 — Spec 04: Authorization
 
 > **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Analogi**: Ory Keto (simplified) + Casbin
 
 ---
 
@@ -8,10 +9,37 @@
 
 Auth7 menggunakan **hybrid RBAC + ABAC** untuk authorization:
 
+```
+┌────────────────────────────────────────────────────────┐
+│  Authorization Decision                                │
+│                                                        │
+│  RBAC:  User → Roles → Permissions → Resource:Action  │
+│                    +                                   │
+│  ABAC:  Context Conditions (branch, time, IP, etc.)    │
+│                    =                                   │
+│  Decision: ALLOW or DENY                               │
+└────────────────────────────────────────────────────────┘
+```
+
+### Filosofi
+- **Default Deny**: jika tidak ada rule yang explicitly allow, maka DENY
+- **Tenant-Scoped**: semua permission di-scope ke org_id
+- **Role Inheritance**: role dapat inherit dari role lain
+- **Casbin Backend**: RBAC model menggunakan Casbin (konsisten dengan service7-template)
+
 - **RBAC** (Role-Based Access Control): 90% use cases — role → permission mapping
 - **ABAC** (Attribute-Based Access Control): 10% use cases — time-based, multi-attribute, complex logic
 
 ### 1.1 RBAC Model
+
+```
+Organization (Bank)
+  ├── Role (dapat per-org)
+  │     ├── Permission Set
+  │     └── inherits_from (role lain)
+  └── User
+        └── UserRole (user → role, dalam konteks org)
+```
 
 ```
 User → Role → Permission → Resource
@@ -23,6 +51,23 @@ User → Role → Permission → Resource
 | **Role** | Kumpulan permissions (teller, supervisor, org_admin) |
 | **Permission** | Action pada resource (account:read, transaction:create) |
 | **Resource** | Objek yang dilindungi (account, transaction, user, dll) |
+
+### 1.2 Permission Model
+
+```
+permission = resource:action
+
+resource  = "workflow", "user", "report", "config", etc.
+action    = "read", "write", "delete", "approve", "reject", dll.
+
+Contoh:
+  "workflow:read"
+  "workflow:approve"
+  "user:create"
+  "user:delete"
+  "report:export"
+  "config:manage"
+```
 
 ### 1.2 ABAC Model
 
@@ -81,23 +126,26 @@ Developer bisa pilih yang sesuai kompleksitas.
 
 ## 2. Casbin Integration
 
-### 2.1 Model Conf
+### 2.1 Model Conf (RBAC with Domains)
+
+Auth7 menggunakan **RBAC dengan domain/tenant** support:
 
 ```ini
+# casbin model
 [request_definition]
-r = sub, obj, act
+r = sub, dom, obj, act
 
 [policy_definition]
-p = sub, obj, act
+p = sub, dom, obj, act, eft
 
 [role_definition]
-g = _, _
+g = _, _, _   # user, role, domain
 
 [policy_effect]
-e = some(where (p.eft == allow))
+e = some(where (p.eft == allow)) && !some(where (p.eft == deny))
 
 [matchers]
-m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act || r.sub == "super_admin"
+m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act
 ```
 
 ### 2.2 Custom PGX Adapter
