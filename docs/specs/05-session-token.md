@@ -24,7 +24,8 @@ Key: session:{session_id}
 Value: {
   "user_id": "user-uuid",
   "org_id": "org-uuid",
-  "branch_id": "branch-uuid",
+  "active_branch_id": "branch-uuid",     // branch yang sedang aktif
+  "assigned_branch_ids": ["branch-uuid-1", "branch-uuid-2"],  // semua branch yang bisa diakses
   "client_id": "client-id",
   "ip_address": "192.168.1.1",
   "user_agent": "Mozilla/5.0...",
@@ -71,19 +72,20 @@ Login
 
 ```go
 type SessionData struct {
-    ID          string    `json:"id"`
-    UserID      string    `json:"user_id"`
-    OrgID       string    `json:"org_id"`
-    BranchID    string    `json:"branch_id,omitempty"`
-    Roles       []string  `json:"roles"`
-    Permissions []string  `json:"permissions,omitempty"`  // cached subset
-    IPAddress   string    `json:"ip_address"`
-    UserAgent   string    `json:"user_agent"`
-    DeviceInfo  string    `json:"device_info"`
-    CreatedAt   int64     `json:"created_at"`  // unix timestamp
-    ExpiresAt   int64     `json:"expires_at"`
-    LastUsedAt  int64     `json:"last_used_at"`
-    MFAVerified bool      `json:"mfa_verified"`
+    ID                  string    `json:"id"`
+    UserID              string    `json:"user_id"`
+    OrgID               string    `json:"org_id"`
+    ActiveBranchID      string    `json:"active_branch_id"`              // branch sedang aktif
+    AssignedBranchIDs   []string  `json:"assigned_branch_ids,omitempty"`  // semua branch yang bisa diakses
+    Roles               []string  `json:"roles"`                          // roles untuk active branch
+    Permissions         []string  `json:"permissions,omitempty"`          // cached subset
+    IPAddress           string    `json:"ip_address"`
+    UserAgent           string    `json:"user_agent"`
+    DeviceInfo          string    `json:"device_info"`
+    CreatedAt           int64     `json:"created_at"`       // unix timestamp
+    ExpiresAt           int64     `json:"expires_at"`
+    LastUsedAt          int64     `json:"last_used_at"`
+    MFAVerified         bool      `json:"mfa_verified"`
 }
 ```
 
@@ -92,32 +94,125 @@ type SessionData struct {
 Setiap request yang berhasil memperpanjang session TTL:
 - Jika `remaining TTL < 30%` dari total TTL → renew
 - Max session lifetime: 12 jam (hard limit)
-- Absolute expiry: tidak peduli ada aktivitas, session expires di jam X
+- Absolute expiry: session expires sesuai `session_end_time` untuk role tersebut
 
-**Banking requirement**: Session WAJIB expired saat:
-- Jam kerja selesai (16:00)
+**Banking requirement**: Session expired saat:
+- Jam kerja selesai sesuai role (bukan hardcoded 16:00)
 - User logout manual
 - Admin force-logout
 - Password berubah
 - Account di-lock
 
-### 2.5 Max Concurrent Sessions
+### 2.5 Session Timeout by Role (Configurable via Policy7)
+
+Session expiry time **bukan hardcoded 16:00** — melainkan **configurable** dengan hierarchy override:
+
+```
+Override priority (paling spesifik menang):
+1. User-specific override  → user_id = "john"         (prioritas tertinggi)
+2. Role default            → role = "accounting"       (prioritas kedua)
+3. Organization default    → org_id = "bank-uuid"      (fallback terakhir)
+```
+
+**Contoh data di policy7:**
+
+```
+# Organization default (fallback)
+category: operational_hours, applies_to: global, applies_to_id: null
+value: { "session_start": "08:00", "session_end": "16:00", "days": ["mon","tue","wed","thu","fri"] }
+
+# Role override — teller
+category: operational_hours, applies_to: role, applies_to_id: "teller"
+value: { "session_start": "08:00", "session_end": "16:00", "days": ["mon","tue","wed","thu","fri"] }
+
+# Role override — accounting
+category: operational_hours, applies_to: role, applies_to_id: "accounting"
+value: { "session_start": "08:00", "session_end": "21:00", "days": ["mon","tue","wed","thu","fri","sat"] }
+
+# Role override — branch manager (24/7)
+category: operational_hours, applies_to: role, applies_to_id: "branch_manager"
+value: { "session_start": "00:00", "session_end": "23:59", "days": ["*"] }
+
+# User-specific override — audit special (lembur sampai malam)
+category: operational_hours, applies_to: user, applies_to_id: "user-audit-uuid"
+value: { "session_start": "00:00", "session_end": "23:59", "days": ["*"] }
+
+# User-specific override — teller yang disuspend jam kerjanya
+category: operational_hours, applies_to: user, applies_to_id: "user-maria-uuid"
+value: { "session_start": "09:00", "session_end": "15:00", "days": ["mon","tue","wed","thu","fri"] }
+```
+
+**Saat login, auth7 query policy7 dengan fallback:**
+
+```
+Login flow:
+1. User authenticate → success
+2. Auth7 query policy7 (dengan override hierarchy):
+   a. GET /v1/params/operational-hours?user_id=john&role=accounting&org_id=bank-uuid
+   b. Policy7 return: value dari user-specific (jika ada), else role, else org default
+3. Auth7 calculate session expires_at:
+   - Jika sekarang 07:30 → expires_at = hari ini sesuai session_end
+   - Jika sekarang 22:00 dan role=accounting (end=21:00) → DENY login (di luar jam kerja)
+   - Jika sekarang 22:00 dan user punya override 24/7 → expires_at = 23:59
+4. Set session TTL = expires_at - now
+```
+
+**Kasus khusus — diluar jam kerja:**
+- Emergency access: admin bisa override via admin API `POST /admin/v1/system/emergency/extend-session`
+- User override di policy7: admin set user-specific operational hours tanpa code changes
+- Query ke policy7 di-cache di Redis (TTL 5 menit) agar tidak setiap request hit policy7
+
+### 2.6 Max Concurrent Sessions
 
 - **Configurable per org**: `organizations.settings.session_policy.max_concurrent`
 - Default: 3 sessions (3 device/browser)
 - Saat batas terlampaui: oldest session di-revoke (atau error, configurable per org)
 - Admin dapat force-revoke sessions via admin API
 
-### 2.6 IP Binding (Soft)
+### 2.6 IP Binding (Hard)
 
-Auth7 menerapkan **soft IP binding** untuk session security:
-- IP address disimpan saat session dibuat
+Auth7 menerapkan **hard IP binding** untuk session security (banking-grade):
+- IP address disimpan saat session dibuat (dalam Redis session data)
 - Setiap request, IP saat ini dibandingkan dengan IP awal
-- Jika IP berubah drastis:
-  - **Warn** dicatat di audit log
-  - User **tidak** di-logout (mobile/VPN friendly)
-  - Admin mendapat notifikasi di dashboard
-- Hard binding (force logout) dapat dikonfigurasi per org jika diperlukan
+- Jika IP berubah → **session langsung di-revoke**, user harus login ulang
+- Audit event dicatat: `session.ip_changed` dengan IP lama dan IP baru
+- Notifikasi ke admin dashboard
+
+**Alasan hard binding untuk banking:**
+- Mencegah session hijacking — jika token dicuri, attacker dari IP berbeda langsung ditolak
+- Regulasi perbankan Indonesia (OJK) mewajibkan mekanisme deteksi anomali akses
+- Konsisten dengan prinsip zero-trust
+
+**Penanganan IP change yang legitimate:**
+- VPN switch / mobile network change → user harus re-login (1x login ulang, bukan blocked permanent)
+- Proxy / load balancer: gunakan `X-Forwarded-For` atau `X-Real-IP` header
+- Branch office WiFi → IP mungkin sama (corporate NAT)
+
+**Perlu diperhatikan di deployment:**
+- Reverse proxy (Nginx) harus forward IP asli client
+- Auth7 membaca IP dari header `X-Forwarded-For` (pertama) atau `X-Real-IP`, fallback ke `RemoteAddr`
+- Jika deployment di belakang load balancer, pastikan header IP di-trust hanya dari proxy internal
+
+### 2.7 Branch Switching in Session
+
+Saat user switch branch (via `POST /api/v1/auth/switch-branch`):
+1. Validasi: `target_branch_id` ada di `assigned_branch_ids`
+2. Re-authenticate: user harus masukkan password lagi (banking security)
+3. Update session: `active_branch_id` = target, `roles` & `permissions` dari `user_roles` untuk branch baru
+4. Issue new access token dengan claims yang di-update
+5. Invalidate cached permissions (role berubah per branch)
+6. Insert audit: `user.switch_branch`
+
+SessionRedis setelah branch switch:
+```
+session:{id} → {
+  "active_branch_id": "kcp-dago-uuid",    // berubah
+  "assigned_branch_ids": ["kc-bdg", "kcp-dago", "kc-jkt"],  // tetap sama
+  "roles": ["teller"],                     // berubah (dari supervisor → teller)
+  "permissions": ["account:read", "transaction:create"],  // berubah
+  ...
+}
+```
 
 ---
 
@@ -301,10 +396,15 @@ Set-Cookie: auth7_session=session_value;
 
 | Konteks | TTL |
 |---|---|
-| Working hours session | 8 jam |
-| Standard session | 24 jam |
+| Working hours session | 8 jam (default, configurable via policy7) |
+| Extended hours (accounting) | Sampai sesi berakhir (configurable per role) |
+| Standard session | 8 jam |
 | Remember me (future) | 30 hari |
 | M2M / service account | Tidak ada refresh (re-authenticate) |
+
+> **Catatan**: TTL refresh token di-derive dari `session_end_time` yang didapat dari policy7.
+> Teller (08:00-16:00) mendapat TTL 8 jam. Accounting (08:00-21:00) mendapat TTL 13 jam.
+> Admin 24/7 mendapat TTL 24 jam.
 
 ### 7.3 Security Measures
 
@@ -403,43 +503,115 @@ DELETE /api/v1/me/sessions
 
 ---
 
-## 12. Open Questions
+## 12. NATS Integration (v1.0)
 
-1. **Apakah access token harus memuat roles/permissions langsung?**
-   → Pro: zero-latency permission check di resource server
-   → Con: stale permissions (kalau role berubah, token lama masih valid)
-   → Decision: roles in token (short TTL mitigates staleness), tapi ABAC conditions tetap di-check real-time
+**Part of Hybrid Messaging Model** — Redis untuk cache, NATS untuk event streaming.
 
-2. **Session storage: Redis saja atau juga PostgreSQL?**
-   → Redis untuk active sessions (fast lookup)
-   → PostgreSQL untuk audit/history sessions (setelah expired, pindah ke audit log)
+### 12.1 Events Published
 
-3. **Apakah perlu "remember me" feature untuk banking?**
-   → Banking standard: NO. Session harus expire setelah jam kerja.
-   → Tapi: mungkin perlu untuk admin panel?
+Auth7 publishes events ke NATS untuk konsumsi service lain:
 
-4. **IP binding untuk sessions?**
-   → ✅ **KEPUTUSAN: Soft binding**
-   → Warn jika IP berubah drastis, bukan force logout
-   → Mobile/VPN friendly, tetap maintain security audit trail
+| Event | Subject | Payload | Subscribers |
+|-------|---------|---------|-------------|
+| **Token Revoked** | `auth7.tokens.revoked` | `{token_id, org_id, user_id, revoked_by, reason, revoked_at}` | workflow7, core7-enterprise, notif7 |
+| **Token Refreshed** | `auth7.tokens.refreshed` | `{token_id, org_id, user_id, refreshed_at}` | audit |
+| **Session Created** | `auth7.sessions.created` | `{session_id, org_id, user_id, ip_address, user_agent, created_at}` | audit |
+| **Session Terminated** | `auth7.sessions.terminated` | `{session_id, org_id, user_id, reason, terminated_at}` | audit, notif7 |
+| **Session Revoked All** | `auth7.sessions.revoked_all` | `{org_id, revoked_by, revoked_at}` | All services |
+| **Security Alert** | `auth7.security.alert` | `{type, severity, org_id, user_id, details, occurred_at}` | notif7, audit |
 
-5. **Token family (Refresh Token family) approach?**
-   → Satu user bisa punya N refresh token families (N = N sessions)
-   → Reuse detection per family, bukan per user
-   → ✅ **KEPUTUSAN: Implement ini**
+**Alert Types**:
+- `brute_force_detected` — Multiple failed login attempts
+- `new_device_login` — Login from unrecognized device
+- `suspicious_activity` — Anomalous behavior detected
+- `mfa_disabled` — User disabled MFA
+- `password_changed` — User changed password
 
-6. **Max concurrent sessions: hardcoded atau configurable?**
-   → ✅ **KEPUTUSAN: Configurable per org**
-   → Diatur di `organizations.settings.session_policy.max_concurrent`
-   → Default: 3 sessions
+### 12.2 Events Subscribed
 
-7. **Apakah perlu persistent session (remember me)?**
-   → Banking: Tidak (session expire di akhir jam kerja)
+Auth7 subscribes ke events dari service lain:
 
-8. **Bagaimana handling jika user membuka multiple tabs?**
-   → Session shared via cookies (same domain)
-   → Logout di satu tab → tab lain redirect ke login saat next request
+| Subject | Publisher | Handler |
+|---------|-----------|---------|
+| `policy7.params.updated` | policy7 | Invalidate OPA cache untuk parameter yang berubah |
+| `policy7.params.deleted` | policy7 | Invalidate OPA cache |
+
+**Use Case**: Saat admin ubah operational hours di policy7, auth7 OPA perlu invalidate cache untuk pickup new value.
+
+### 12.3 Configuration
+
+```yaml
+# configs/nats.yaml
+messaging:
+  nats:
+    url: "${NATS_URL}"              # nats://localhost:4222
+    name: "auth7"
+    reconnect_wait: 2s
+    max_reconnects: 10
+    
+    publish:
+      timeout: 5s
+      retry: 3                    # Retry 3x dengan exponential backoff
+      
+    subscribe:
+      queue_group: "auth7-opa"     # Load balancing
+```
+
+### 12.4 Fail-Safe Design
+
+**Publishing Failures**:
+- ❌ **Non-blocking**: NATS failures tidak menghentikan business logic
+- ✅ **Logged**: Warning log dengan correlation ID
+- ✅ **Retry**: 3 attempts dengan exponential backoff
+- ✅ **Source of Truth**: Database tetap authoritative
+
+**Subscription Failures**:
+- ✅ **Auto-reconnect**: Dengan exponential backoff
+- ⚠️ **Graceful Degradation**: Continue tanpa real-time updates (cache stale briefly)
+- ✅ **Health Check**: Endpoint `/health/nats` untuk monitoring
+
+### 12.5 Example Flow: Token Revocation
+
+```
+Admin revoke token → Auth7
+                        │
+                        ├── 1. Update DB (revoke token)
+                        │
+                        ├── 2. Invalidate Redis cache
+                        │
+                        └── 3. Publish NATS event
+                                Subject: auth7.tokens.revoked
+                                │
+                                ▼
+                        ┌───────────────┐
+                        │     NATS      │
+                        └───────┬───────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            │                   │                   │
+            ▼                   ▼                   ▼
+      ┌──────────┐       ┌──────────┐       ┌──────────┐
+      │ workflow7│       │  core7   │       │  notif7  │
+      │          │       │enterprise│       │          │
+      │ Invalidate│       │Invalidate│       │  Notify  │
+      │  cache   │       │  cache   │       │  admin   │
+      └──────────┘       └──────────┘       └──────────┘
+```
+
+### 12.6 Why NATS (not Redis Pub/Sub)?
+
+| Feature | Redis Pub/Sub | NATS |
+|---------|---------------|------|
+| Request-Reply | ❌ No | ✅ Yes |
+| Queue Groups (load balancing) | ❌ No | ✅ Yes |
+| Durable Subscriptions | ❌ No | ✅ Yes |
+| Reconnection Handling | Basic | Advanced |
+| Service Discovery | ❌ No | ✅ Built-in |
+
+**Decision**: Redis untuk cache, NATS untuk service communication.
 
 ---
+
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [04-authorization.md](./04-authorization.md) | Next: [06-mfa.md](./06-mfa.md)*

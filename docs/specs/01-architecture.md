@@ -133,8 +133,11 @@ Fine-grained access control:
 
 #### `tenant/` — Multi-Tenancy
 - Organization (Bank level)
-- Branch hierarchy (HEAD_OFFICE → REGIONAL → BRANCH → SUB_BRANCH → CASH_OFFICE)
-- Branch-to-branch relationships (parent/child)
+- Branch types configurable per org via tabel `branch_types`
+  - Setiap org mendefinisikan sendiri: code, label, short_code, level, is_operational, can_have_children
+  - Contoh bank konvensional: KP(0) → KW(1) → KC(2) → KCP(3) → KK(4)
+  - Contoh bank digital: Head Office(0) → Branch(1)
+- Branch hierarchy menggunakan `branch_hierarchies` (parent/child + path traversal)
 - Tenant-scoped user, role, permission
 - Cross-tenant admin capability
 
@@ -174,6 +177,9 @@ Fine-grained access control:
 | `/auth/login/mfa` | POST | MFA verification |
 | `/auth/logout` | POST | Logout + revoke session |
 | `/auth/refresh` | POST | Refresh token |
+| `/auth/switch-branch` | POST | Switch active branch (re-auth required) |
+| `/auth/logout` | POST | Logout + revoke session |
+| `/auth/refresh` | POST | Refresh token |
 | `/auth/recover` | POST | Request password recovery |
 | `/auth/recover/{token}` | PUT | Reset password |
 | `/auth/verify-email` | POST | Email verification |
@@ -210,6 +216,8 @@ Fine-grained access control:
 | `/admin/v1/roles/{id}/permissions` | POST | Assign permissions |
 | `/admin/v1/branches` | GET/POST | Branch list, create |
 | `/admin/v1/branches/{id}` | GET/PUT/DELETE | Branch CRUD |
+| `/admin/v1/users/{id}/branches` | GET/POST | User branch assignments |
+| `/admin/v1/users/{id}/branches/{bid}` | PUT/DELETE | Update/revoke branch access |
 | `/admin/v1/clients` | GET/POST | OAuth2 client list, create |
 | `/admin/v1/clients/{id}` | GET/PUT/DELETE | Client CRUD |
 | `/admin/v1/permissions` | GET | List all permissions |
@@ -412,26 +420,15 @@ Konsisten dengan `service7-template`:
 
 ---
 
-## 8. Open Questions
+## 8. Konvensi Arsitektur
 
-1. **Apakah perlu health check endpoint terpisah?**
-   → Ya: `/health` (liveness) dan `/ready` (readiness)
+Konsisten dengan `service7-template`:
 
-2. **Apakah perlu graceful shutdown?**
-   → Ya: drain connections, close DB pool, flush audit buffer
-
-3. **Apakah perlu gRPC server terpisah atau multiplexed dengan HTTP?**
-   → Rekomendasi: cmux untuk multiplex HTTP + gRPC di port yang sama
-
-4. **Rate limiting: Redis-based atau in-memory bucket?**
-   → Redis-based lebih cocok untuk deployment multi-instance
-
-5. **JWKS key rotation: manual atau auto-rotate?**
-   → v1.0: manual rotation via admin API
-   → v2.0: auto-rotate dengan grace period
-
-6. **Apakah auth7-svc perlu read replica support?**
-   → Iya, untuk scale query-heavy operations (audit log query, token introspection)
+- Setiap Go method: `const op = "package.Type.Method"`
+- Setiap Go method: `logging.WithTrace(ctx, logger)` + `ctx, span := tracer.Start(ctx, op)`
+- Semua error di-wrap: `fmt.Errorf("%s: %w", op, err)`
+- Store method multi-tenant: wajib terima `orgID uuid.UUID` eksplisit
+- Tidak ada secret di config file — hanya `"${ENV_VAR}"`
 
 ---
 

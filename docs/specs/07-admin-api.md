@@ -57,7 +57,10 @@ Response:
       "status": "active",
       "mfa_enabled": true,
       "org_id": "uuid",
-      "branch_id": "uuid",
+      "branch_assignments": [
+        { "branch_id": "uuid-kc-bandung", "branch_name": "KC Bandung", "is_primary": true },
+        { "branch_id": "uuid-kcp-dago", "branch_name": "KCP Dago", "is_primary": false }
+      ],
       "roles": ["teller"],
       "last_login_at": "2026-04-22T08:00:00Z",
       "created_at": "2026-01-01T00:00:00Z"
@@ -82,11 +85,17 @@ Authorization: Bearer <token>
   "email": "jane.doe@bank.co.id",
   "full_name": "Jane Doe",
   "org_id": "uuid",
-  "branch_id": "uuid",           // optional
-  "roles": ["teller"],           // optional, tambah roles langsung
-  "send_welcome_email": true,    // kirim email via auth7 internal SMTP mailer
-  "temp_password": "Temp@1234",  // optional, jika tidak di-set → generated
-  "require_password_change": true // user wajib ganti saat login pertama
+  "branch_assignments": [            // wajib minimal 1, is_primary = true
+    { "branch_id": "uuid-kc-bandung", "is_primary": true },
+    { "branch_id": "uuid-kcp-dago", "is_primary": false }
+  ],
+  "roles": [                          // role per branch
+    { "branch_id": "uuid-kc-bandung", "role_id": "uuid-supervisor" },
+    { "branch_id": "uuid-kcp-dago", "role_id": "uuid-teller" }
+  ],
+  "send_welcome_email": true,         // kirim email via auth7 internal SMTP
+  "temp_password": "Temp@1234",       // optional, jika tidak di-set → generated
+  "require_password_change": true       // user wajib ganti saat login pertama
 }
 
 Response:
@@ -99,6 +108,8 @@ Response:
 - Generate temporary password
 - Kirim welcome email dengan link setup password
 - Return user object (tanpa password)
+- Minimal 1 branch assignment dengan `is_primary: true`
+- Role assignments opsional (bisa ditambahkan nanti)
 
 ### 2.3 Update User
 
@@ -107,10 +118,26 @@ PUT /admin/v1/users/:id
 {
   "full_name": "Jane Doe Updated",
   "email": "jane.new@bank.co.id",  // trigger re-verification
-  "branch_id": "new-branch-uuid",  // pindah cabang
   "status": "inactive"             // non-aktifkan
 }
 ```
+
+### 2.3.1 Update User Branch Assignments
+
+```
+PUT /admin/v1/users/:id/branch-assignments
+{
+  "branch_assignments": [
+    { "branch_id": "uuid-kc-bandung", "is_primary": true },
+    { "branch_id": "uuid-kcp-dago", "is_primary": false },
+    { "branch_id": "uuid-kc-surabaya", "is_primary": false }  // tambah cabang baru
+  ]
+}
+```
+
+- Mengganti seluruh daftar branch assignment (full replace)
+- Wajib minimal 1 assignment dengan `is_primary: true`
+- Cabang yang dihapus otomatis kehilangan role assignments terkait
 
 ### 2.4 Lock / Unlock User
 
@@ -257,18 +284,35 @@ DELETE /admin/v1/roles/:id/permissions
 }
 ```
 
-### 3.3 User Role Assignment
+### 3.3 User Role Assignment (per Branch)
+
+Roles di-assign per user per branch, konsisten dengan data model `user_roles`.
 
 ```
-GET    /admin/v1/users/:id/roles
+GET    /admin/v1/users/:id/roles?branch_id=uuid     # roles user di branch tertentu
+GET    /admin/v1/users/:id/roles                     # semua roles user (semua branch)
+
 POST   /admin/v1/users/:id/roles
 {
-  "roles": ["teller", "supervisor"],
+  "roles": [
+    { "role_id": "uuid-supervisor", "branch_id": "uuid-kc-bandung" },
+    { "role_id": "uuid-teller", "branch_id": "uuid-kcp-dago" }
+  ],
   "effective_from": "2026-04-22",   // optional
   "effective_until": "2026-12-31"   // optional (temporary role)
 }
 
-DELETE /admin/v1/users/:id/roles/:role_id
+DELETE /admin/v1/users/:id/roles/:role_id?branch_id=uuid   // hapus role di branch tertentu
+```
+
+**Contoh response GET:**
+```json
+{
+  "roles": [
+    { "role_id": "uuid-supervisor", "role_name": "supervisor", "branch_id": "uuid-kc-bandung", "branch_name": "KC Bandung" },
+    { "role_id": "uuid-teller", "role_name": "teller", "branch_id": "uuid-kcp-dago", "branch_name": "KCP Dago" }
+  ]
+}
 ```
 
 ### 3.4 Delete Role
@@ -282,12 +326,77 @@ DELETE /admin/v1/roles/:id
 
 ---
 
-## 4. Branch Management
+## 4. Branch Type & Branch Management
 
-### 4.1 List Branches
+### 4.1 Branch Type CRUD
+
+Branch types adalah konfigurasi per organization — mendefinisikan jenis-jenis kantor.
 
 ```
-GET /admin/v1/branches
+GET    /admin/v1/orgs/:org_id/branch-types
+POST   /admin/v1/orgs/:org_id/branch-types
+PUT    /admin/v1/branch-types/:id
+DELETE /admin/v1/branch-types/:id    // hanya jika tidak dipakai branch
+```
+
+**List Branch Types:**
+```
+GET /admin/v1/orgs/:org_id/branch-types
+
+Response:
+{
+  "branch_types": [
+    {
+      "id": "uuid",
+      "code": "HEAD_OFFICE",
+      "label": "Kantor Pusat",
+      "short_code": "KP",
+      "level": 0,
+      "is_operational": true,
+      "can_have_children": true,
+      "sort_order": 0
+    },
+    {
+      "id": "uuid",
+      "code": "BRANCH",
+      "label": "Kantor Cabang",
+      "short_code": "KC",
+      "level": 2,
+      "is_operational": true,
+      "can_have_children": true,
+      "sort_order": 2
+    }
+  ]
+}
+```
+
+**Create Branch Type:**
+```
+POST /admin/v1/orgs/:org_id/branch-types
+{
+  "code": "REGIONAL",
+  "label": "Kantor Wilayah",
+  "short_code": "KW",
+  "level": 1,
+  "is_operational": false,
+  "can_have_children": true,
+  "sort_order": 1
+}
+```
+
+**Update Branch Type:**
+```
+PUT /admin/v1/branch-types/:id
+{
+  "label": "Kantor Wilayah Baru",
+  "is_operational": true
+}
+```
+
+### 4.2 List Branches
+
+```
+GET /admin/v1/branches?org_id=uuid&branch_type_id=uuid
 
 Response:
 {
@@ -296,39 +405,66 @@ Response:
       "id": "uuid",
       "code": "BDG",
       "name": "Bandung Branch",
-      "branch_type": "cabang",
-      "parent_id": null,
-      "org_id": "org-uuid"
+      "branch_type_id": "uuid-branch-type",
+      "branch_type_code": "BRANCH",
+      "branch_type_label": "Kantor Cabang",
+      "is_operational": true,
+      "parent_id": "uuid-kw-jawabar",
+      "org_id": "org-uuid",
+      "status": "active"
     }
   ]
 }
 ```
 
-### 4.2 Create Branch
+### 4.3 Create Branch
 
 ```
 POST /admin/v1/branches
 {
   "code": "SBY",
   "name": "Surabaya Branch",
-  "branch_type": "cabang",
-  "parent_id": null
+  "branch_type_id": "uuid-branch-type",   // FK ke branch_types
+  "parent_id": null                         // null untuk branch paling atas
 }
 ```
 
-### 4.3 Branch Hierarchy
+### 4.4 Update Branch
 
 ```
-GET /admin/v1/branch-hierarchies
+PUT /admin/v1/branches/:id
+{
+  "name": "Surabaya Branch Updated",
+  "branch_type_id": "uuid-new-type",   // ubah tipe kantor
+  "status": "inactive"
+}
+```
+
+### 4.5 Branch Hierarchy
+
+```
+GET /admin/v1/orgs/:org_id/branch-hierarchies
 
 Response:
 {
   "hierarchies": [
-    {"parent_id": "kantor-pusat", "child_id": "BDG"},
-    {"parent_id": "BDG", "child_id": "BDG-KPO"}
+    { "parent_id": null, "child_id": "uuid-kp", "child_name": "Kantor Pusat", "depth": 0 },
+    { "parent_id": "uuid-kp", "child_id": "uuid-kw-jawabar", "child_name": "Kanwil Jawa Barat", "depth": 1 },
+    { "parent_id": "uuid-kw-jawabar", "child_id": "uuid-kc-bandung", "child_name": "KC Bandung", "depth": 2 }
   ]
 }
 ```
+
+### 4.6 Move Branch (Re-parent)
+
+```
+POST /admin/v1/branches/:id/move
+{
+  "new_parent_id": "uuid-kw-jatim"   // null = jadi root branch
+}
+```
+
+Memindahkan branch ke parent baru dan update seluruh hierarki di bawahnya.
 
 ---
 
@@ -632,35 +768,6 @@ Semua admin actions wajib dicatat:
 
 ---
 
-## 12. Open Questions
-
-1. **Apakah admin API perlu rate limiting sendiri?**
-   → Ya, lebih ketat dari public API (10 req/s untuk admin vs 100 req/s public)
-
-2. **Apakah perlu webhook / event notification saat admin action?**
-   → ✅ **KEPUTUSAN: v1.0** — auth7-svc sebagai producer ke notif7 untuk security alerts
-   → Event types: `auth.account_locked`, `auth.mfa_reset`, `auth.login_new_device`, `auth.password_changed`
-   → Lihat spec `06-mfa.md` Section 11 (Security Alerts via notif7)
-
-3. **Bulk operations: import users dari CSV?**
-   → v1.1: `POST /admin/v1/users/import` dengan file upload
-   → Format: CSV dengan kolom username, email, full_name, branch_id, roles
-
-4. **Admin audit log: harus real-time atau bisa async?**
-   → Audit write: async (background goroutine, channel-based)
-   → Audit read: real-time (SELECT dari DB)
-
-5. **Apakah super_admin perlu MFA selalu?**
-   → Ya, absolute requirement. Tidak bisa di-disable untuk super_admin.
-
-6. **Apakah perlu bulk actions di user list?**
-   → v1.0: Tidak (satu per satu)
-   → v1.1: Ya (bulk suspend, bulk role assignment)
-
-7. **Apakah perlu audit trail UI?**
-   → v1.0: Tidak (audit log hanya via API)
-   → v1.1: Ya (audit log viewer di auth7-ui)
-
----
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [06-mfa.md](./06-mfa.md) | Next: [08-data-model.md](./08-data-model.md)*

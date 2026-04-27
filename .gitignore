@@ -1,0 +1,27 @@
+# Binaries
+bin/
+tmp/
+
+# Config dengan secrets
+.env
+.env.*
+!.env.example
+configs/config.yaml
+
+# Coverage
+coverage.out
+coverage.html
+
+# Build artifacts
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

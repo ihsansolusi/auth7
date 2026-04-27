@@ -136,7 +136,7 @@ grant_type=refresh_token
 
 ---
 
-## 2. Token Design
+## 3. Token Design
 
 ### 2.1 Access Token (JWT)
 
@@ -149,7 +149,7 @@ grant_type=refresh_token
   "iat": 1713798000,
   "jti": "token-uuid",
   "org_id": "org-uuid",
-  "branch_id": "branch-uuid",
+  "branch_id": "branch-uuid",       // active branch (bisa berubah via switch-branch)
   "roles": ["teller", "supervisor"],
   "permissions": ["account:read", "transaction:create"],
   "mfa_verified": true,
@@ -194,14 +194,14 @@ grant_type=refresh_token
   "email": "john@bank.co.id",
   "email_verified": true,
   "org_id": "org-uuid",
-  "branch_id": "branch-uuid",
+  "branch_id": "branch-uuid",       // active branch saat token di-issue
   "roles": ["teller", "supervisor"]
 }
 ```
 
 ---
 
-## 3. Token Format: JWT + Opaque
+## 4. Token Format: JWT + Opaque
 
 | Format | Use Case | Revocation |
 |---|---|---|
@@ -218,7 +218,7 @@ Client bisa request format saat register:
 
 ---
 
-## 4. OAuth2 Client
+## 5. OAuth2 Client
 
 ### 4.1 Client Entity
 
@@ -287,7 +287,7 @@ Response:
 
 ---
 
-## 5. OIDC Discovery
+## 6. OIDC Discovery
 
 ### 5.1 `.well-known/openid-configuration`
 
@@ -333,23 +333,46 @@ GET /.well-known/jwks.json
 
 ---
 
-## 6. Consent Screen
+## 7. Consent Screen
 
 - **v1.0**: Tidak ada (internal clients auto-approve)
 - **v2.0**: Consent screen untuk third-party clients
 
 ---
 
-## 7. Open Questions
+## 8. Branch Context in Tokens
 
-1. **Apakah perlu Device Flow untuk CLI apps?**
-   → v1.0: Tidak
-   → v1.1: Ya (OAuth2 Device Authorization Grant)
+Karena user bisa punya akses multi-branch, token JWT selalu mengandung `branch_id` yang merepresentasikan **active branch** saat ini.
 
-2. **Apakah perlu PAR (Pushed Authorization Requests)?**
-   → v1.0: Tidak
-   → v2.0: Ya (untuk security tinggi)
+- `access_token.branch_id` = branch yang sedang aktif (bisa berubah via `/auth/switch-branch`)
+- `id_token.branch_id` = branch saat token di-issue (info saja, tidak dipakai untuk authorization)
+- Saat switch branch: issue **new access_token** dengan `branch_id` baru, refresh_token tetap valid
+- Permission/role di-derive dari kombinasi `user_id + org_id + branch_id` (bukan `user_id + org_id` saja)
+
+**Contoh: User John di KC Bandung (supervisor) vs KCP Dago (teller):**
+
+```
+# Token saat aktif di KC Bandung
+{
+  "sub": "john-uuid",
+  "org_id": "bank-uuid",
+  "branch_id": "kc-bandung-uuid",
+  "roles": ["supervisor"],
+  "permissions": ["account:read", "account:write", "transaction:approve"]
+}
+
+# Token saat switch ke KCP Dago
+{
+  "sub": "john-uuid",
+  "org_id": "bank-uuid",
+  "branch_id": "kcp-dago-uuid",
+  "roles": ["teller"],
+  "permissions": ["account:read", "transaction:create"]
+}
+```
 
 ---
+
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [02-identity.md](./02-identity.md) | Next: [04-authorization.md](./04-authorization.md)*

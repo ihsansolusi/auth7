@@ -92,8 +92,9 @@
 > Diatur di `organizations.settings.session_policy.max_concurrent`
 
 **Q7.2** — IP binding untuk session: hard binding (force logout jika IP beda) atau soft (warn saja)?
-> ✅ **KEPUTUSAN: Soft binding**
-> Warning saja jika IP berubah, tidak force logout — mobile/VPN friendlier
+> ✅ **KEPUTUSAN: Hard IP binding** (force logout jika IP berubah)
+> Banking-grade security: mencegah session hijacking, konsisten dengan OJK regulations.
+> VPN/network switch → user harus re-login (1x login ulang, bukan blocked permanent).
 
 ---
 
@@ -186,7 +187,7 @@
 - [x] **Q6.1** dijawab → email OTP masuk v1.0 via auth7 internal SMTP mailer (bukan notif7)
 - [x] **Q6.2** dijawab → tidak ada trusted device
 - [x] **Q7.1** dijawab → max concurrent sessions configurable per org
-- [x] **Q7.2** dijawab → soft IP binding (warn saja)
+- [x] **Q7.2** dijawab → hard IP binding (force logout jika IP berubah)
 - [x] **Q8.1** dijawab → impersonation di v1.1
 - [x] **Q8.2** dijawab → soft delete langsung
 - [x] **Q8.3** dijawab → bulk import CSV masuk v1.0
@@ -220,7 +221,7 @@
 | **Token** | Access 15 menit, Refresh 8 jam |
 | **MFA** | TOTP (setiap login, no trusted device), email OTP (internal SMTP) |
 | **Authorization** | RBAC + ABAC (JSON + Rego hybrid), Casbin custom pgx, wildcard admin |
-| **Session** | Configurable max concurrent per org, soft IP binding |
+| **Session** | Configurable max concurrent per org, hard IP binding (force logout) |
 | **Admin API** | CRUD user/role/client, rate limiting 10 req/s |
 | **Audit** | Immutable log, 5 tahun retention |
 | **Security** | Argon2id, RS256, WAF infrastructure, pentest wajib |

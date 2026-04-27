@@ -5,7 +5,12 @@ Panduan konteks untuk Claude AI saat bekerja di repo `ihsansolusi/auth7`.
 ## Identitas Proyek
 
 - **Nama**: Auth7 — Identity & Access Management Platform untuk Core7
-- **Fase saat ini**: **Brainstorming** (specs phase)
+- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-02 complete, Plan 03 ready to start
+- **Planning Status**: ✅ **COMPLETE** — All specs reviewed, 12 plans, 111 GitHub issues
+- **Implementation Start**: ✅ COMPLETE — Plans 01 & 02 finished (2026-04-27)
+- **Root Issue**: [#1 — Auth7 v1.0](https://github.com/ihsansolusi/auth7/issues/1)
+- **Total GitHub Issues**: 111 issues (1 root + 12 plan groups + 98 implementation issues)
+- **Project Board**: [Core7 v2026.1](https://github.com/orgs/ihsansolusi/projects/8)
 - **Repo**: `github.com/ihsansolusi/auth7`
 - **Working dir**: `supported-apps/auth7/` (di dalam core7-devroot devroot)
 - **Parent project**: [Core7 v2026.1 — Project #8](https://github.com/orgs/ihsansolusi/projects/8)
@@ -28,9 +33,28 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 |------|--------|---------|
 | Brainstorming (Specs) | **✅ DONE** | 11 spec files (00-10), recreated 2026-04-22 |
 | Open Questions Review | **✅ DONE** | Semua 30 questions dijawab |
-| Specs Review (1-per-1) | **🔲 TODO** | Review bersama user |
-| Implementation Plans | **🔲 TODO** | Setelah specs disetujui |
-| Plan 01 — Foundation | **🔲 TODO** | Repo, CI/CD, Docker, DB migrations |
+| Specs Review (1-per-1) | **✅ DONE** | Review 1-per-1 selesai (2026-04-24) |
+| Implementation Plans | **✅ DONE** | 10 plans created, 91 GitHub issues |
+| GitHub Issues Created | **✅ DONE** | All issues linked to Project #8 |
+| Plan 01 — Foundation | **✅ DONE** | Issues #12-21, completed 2026-04-27 |
+| Plan 02 — Identity Core | **✅ DONE** | Issues #22-29, completed 2026-04-27 |
+
+### Plan Status
+
+| Plan | Status | Group Issue | Individual Issues |
+|------|--------|-------------|-------------------|
+| [Plan 01](./docs/plans/PLAN-01.md) | ✅ DONE | [#2](https://github.com/ihsansolusi/auth7/issues/2) | #12-21 (10) |
+| [Plan 02](./docs/plans/PLAN-02.md) | ✅ DONE | [#3](https://github.com/ihsansolusi/auth7/issues/3) | #22-29 (8) |
+| Plan 03 — Session & Token Management | ✅ DONE | [#4](https://github.com/ihsansolusi/auth7/issues/4) | #30-37 (8) |
+| [Plan 04](./docs/plans/PLAN-04.md) | 📋 Planned | [#5](https://github.com/ihsansolusi/auth7/issues/5) | #38-44 (7) |
+| [Plan 05](./docs/plans/PLAN-05.md) | 📋 Planned | [#6](https://github.com/ihsansolusi/auth7/issues/6) | #45-50 (6) |
+| [Plan 06](./docs/plans/PLAN-06.md) | 📋 Planned | [#7](https://github.com/ihsansolusi/auth7/issues/7) | #51-57 (7) |
+| [Plan 07](./docs/plans/PLAN-07.md) | 📋 Planned | [#8](https://github.com/ihsansolusi/auth7/issues/8) | #58-66 (9) |
+| [Plan 08](./docs/plans/PLAN-08.md) | 📋 Planned | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
+| [Plan 09](./docs/plans/PLAN-09.md) | 📋 Planned | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
+| [Plan 10](./docs/plans/PLAN-10.md) | 📋 Planned | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
+| [Plan 11](./docs/plans/PLAN-11.md) | 📋 Planned | [#92](https://github.com/ihsansolusi/auth7/issues/92) | #93-104 (12) |
+| **[Plan 12](./docs/plans/PLAN-12.md)** | 📋 **NEW** | [#105](https://github.com/ihsansolusi/auth7/issues/105) | **#106-112 (7)** |
 
 ## Struktur Folder (Planned)
 
@@ -85,6 +109,7 @@ auth7/
 | gRPC | net/grpc |
 | Database | PostgreSQL 16 (pgx + sqlc) |
 | Cache / Session | Redis (wajib v1.0) |
+| Event Streaming | NATS (v1.0) — Hybrid Messaging Model |
 | Password Hashing | Argon2id (`golang.org/x/crypto`) |
 | JWT | `golang-jwt/jwt/v5` (RS256) |
 | TOTP | `pquerna/otp` |
@@ -102,10 +127,11 @@ auth7/
 | Token format | JWT + Opaque (configurable per client) |
 | Casbin adapter | Custom pgx |
 | ABAC | Hybrid JSON Rules + OPA Rego |
-| Policy sync | Redis pub/sub |
+| Policy sync | Redis pub/sub (cache), NATS (events) |
+| Event streaming | NATS — token revocation, session events, security alerts |
 | MFA | TOTP + Email OTP (setiap login, no trusted device) |
 | Max concurrent sessions | Configurable per org |
-| IP binding | Soft (warn saja) |
+| IP binding | Hard (force logout jika IP berubah) |
 | Bulk import CSV | v1.0 |
 | DCR (RFC 7591) | v1.0 |
 | OIDC Discovery | Ya |
@@ -153,7 +179,103 @@ cmd/ → internal/api/ → internal/service/ → internal/store/ → internal/do
 | `docs/specs/README.md` | Index semua spec files |
 | `docs/specs/00-overview.md` | Visi dan scope v1.0 |
 | `docs/OPEN-QUESTIONS.md` | Semua keputusan brainstorming (30 questions) |
+| `docs/plans/PLAN-OVERVIEW.md` | Index semua implementation plans |
+| `docs/plans/PLAN-01.md` s/d `PLAN-10.md` | Detail per plan dengan GitHub issue links |
 | `../service7-template/` | Template arsitektur Go yang diadopsi |
 | `../service7-template/specs/` | Referensi pola clean arch |
 | `../notif7/` | Sibling project (unified notification) |
 | `../auth7-ui/` | UI repo (Next.js, terpisah) |
+| `../policy7/` | Sibling project (business policy service) |
+
+---
+
+## Standard Workflow Pattern (Skill Documentation)
+
+Pattern ini digunakan untuk auth7 dan akan menjadi template untuk auth7-ui dan policy7.
+
+### Phase 1: Brainstorming & Specs
+
+1. **Create specs** in `docs/specs/`:
+   - `00-overview.md` — Vision, scope, stack
+   - `01-architecture.md` — Clean arch, components
+   - `02-*.md` — Feature-specific specs
+   - `OPEN-QUESTIONS.md` — All design decisions
+
+2. **Review specs 1-per-1** dengan user:
+   - Read spec file
+   - Discuss dan catat decisions
+   - Update spec jika perlu
+   - Tandai ✅ setelah disetujui
+
+### Phase 2: Implementation Planning
+
+1. **Draft plan structure**:
+   ```
+   Plan 01 — Foundation (repo, CI/CD, Docker)
+   Plan 02 — Core Feature A
+   Plan 03 — Core Feature B
+   ...
+   ```
+
+2. **Get user approval** untuk plan structure
+
+3. **Create GitHub Issues** dengan hierarki:
+   ```
+   core7-devroot#35 (105 - Supported Apps) [sudah ada]
+   └── auth7#1 (ROOT: Project v1.0) [create + addSubIssue]
+       └── auth7#2 (Plan 01 — Foundation) [create + addSubIssue]
+           └── auth7#12-21 (Individual issues) [create + addSubIssue + addProjectV2ItemById]
+   ```
+
+### Phase 3: Issue Creation Script
+
+Gunakan Python script dengan GitHub GraphQL API:
+
+```python
+# Key mutations:
+# 1. createIssue — buat issue
+# 2. addSubIssue — link parent-child
+# 3. addProjectV2ItemById — add ke project board
+# 4. updateProjectV2ItemFieldValue — set status
+```
+
+### Required IDs
+
+- **Project ID**: `PVT_kwDOA0OdHM4BPTJK` (Core7 v2026.1)
+- **Parent Issue**: `I_kwDORNh3Qc7rKfd2` (core7-devroot#35)
+- **Repository IDs**: Query via GraphQL
+- **User ID**: `U_kgDOABKAUg` (galihaprilian)
+
+### Issue Template
+
+```markdown
+## Description
+{title}
+
+## Specs
+- {spec_file}
+
+## Parent
+- Child dari: #{parent_issue} ({parent_title})
+
+## Estimation
+{points} points
+
+## Assignee
+@{username}
+
+## Tasks
+- [ ] Implement
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Documentation
+```
+
+### Next Projects Using This Pattern
+
+- **auth7-ui**: Next.js UI for auth7
+- **policy7**: Business policy & parameter service
+
+---
+
+*Last updated: 2026-04-24 — Implementation Planning Complete*

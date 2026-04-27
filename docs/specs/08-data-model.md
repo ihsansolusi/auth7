@@ -55,15 +55,51 @@ COMMENT ON COLUMN organizations.settings IS 'Org-level config: session_policy, m
 }
 ```
 
-### 2.2 `branches` — Kantor/Cabang Bank
+### 2.2 `branch_types` — Tipe Kantor (Configurable per Org)
+
+Setiap organization mendefinisikan sendiri jenis-jenis kantornya. Tidak di-hardcode — bank berbeda bisa punya struktur berbeda.
+
+```sql
+CREATE TABLE branch_types (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id          UUID NOT NULL REFERENCES organizations(id),
+    code            VARCHAR(50) NOT NULL,          -- 'HEAD_OFFICE', 'REGIONAL', dll
+    label           VARCHAR(255) NOT NULL,         -- 'Kantor Pusat', 'Kantor Wilayah', dll
+    short_code      VARCHAR(10) NOT NULL,          -- 'KP', 'KW', 'KC', dll
+    level           INTEGER NOT NULL,               -- 0 = tertinggi, makin besar = makin rendah
+    is_operational  BOOLEAN NOT NULL DEFAULT true,  -- true = melakukan transaksi nasabah
+    can_have_children BOOLEAN NOT NULL DEFAULT true, -- true = bisa punya sub-branch
+    sort_order      INTEGER NOT NULL DEFAULT 0,    -- urutan tampil di UI
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (org_id, code)
+);
+CREATE INDEX idx_branch_types_org ON branch_types(org_id);
+CREATE INDEX idx_branch_types_level ON branch_types(org_id, level);
+```
+
+**Default seed per org (contoh untuk bank dengan struktur 5 level):**
+
+| code | label | short_code | level | is_operational | can_have_children |
+|------|-------|-----------|-------|---------------|-------------------|
+| `HEAD_OFFICE` | Kantor Pusat | KP | 0 | true | true |
+| `REGIONAL` | Kantor Wilayah | KW | 1 | false | true |
+| `BRANCH` | Kantor Cabang | KC | 2 | true | true |
+| `SUB_BRANCH` | Kantor Cabang Pembantu | KCP | 3 | true | true |
+| `CASH_OFFICE` | Kantor Kas | KK | 4 | true | false |
+
+> **Catatan**: Bank lain bisa punya konfigurasi berbeda — misal digital bank hanya punya
+> `HEAD_OFFICE` dan `BRANCH` (2 level). `branch_types` membuat sistem fleksibel tanpa code changes.
+
+### 2.3 `branches` — Kantor/Cabang Bank
 
 ```sql
 CREATE TABLE branches (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id          UUID NOT NULL REFERENCES organizations(id),
+    branch_type_id  UUID NOT NULL REFERENCES branch_types(id),  -- FK ke branch_types
     code            VARCHAR(20) NOT NULL,
     name            VARCHAR(255) NOT NULL,
-    branch_type     VARCHAR(50) NOT NULL,  -- 'HEAD_OFFICE', 'REGIONAL', 'BRANCH', 'SUB_BRANCH', 'CASH_OFFICE'
     status          VARCHAR(50) NOT NULL DEFAULT 'active',
     address         TEXT,
     phone           VARCHAR(50),
@@ -73,31 +109,24 @@ CREATE TABLE branches (
     UNIQUE (org_id, code)
 );
 CREATE INDEX idx_branches_org_id ON branches(org_id);
-CREATE INDEX idx_branches_type ON branches(branch_type);
+CREATE INDEX idx_branches_type ON branches(branch_type_id);
 ```
 
-**branch_type values (klasifikasi kantor bank):**
-| Code | Nama | Deskripsi |
-|------|------|-----------|
-| `HEAD_OFFICE` | Kantor Pusat Operasional | Kantor pusat operasional bank |
-| `REGIONAL` | Kantor Wilayah | Membawahi kantor cabang (level 1) |
-| `BRANCH` | Kantor cabang | Kantor cabang utama (level 2) |
-| `SUB_BRANCH` | Kantor cabang pembantu | Kantor cabang pembantu (level 3) |
-| `CASH_OFFICE` | Kantor Kas | Kantor terkecil untuk transaksi kas (level 4) |
+### 2.4 `branch_hierarchies` — Hierarki Kantor
 
-### 2.3 `branch_hierarchies` — Hierarki Kantor
+Hierarki disimpan terpisah dari branch_type, memungkinkan struktur tree yang fleksibel:
 
 ```sql
 CREATE TABLE branch_hierarchies (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id          UUID NOT NULL REFERENCES organizations(id),
-    parent_id       UUID REFERENCES branches(id),  -- NULL untuk HEAD_OFFICE
+    parent_id       UUID REFERENCES branches(id),  -- NULL untuk root (HEAD_OFFICE)
     child_id        UUID NOT NULL REFERENCES branches(id),
-    level           INTEGER NOT NULL,              -- 0=HEAD_OFFICE, 1=REGIONAL, 2=BRANCH, 3=SUB_BRANCH, 4=CASH_OFFICE
-    path            VARCHAR(500) NOT NULL,         -- '/{parent_id}/{child_id}/' (untuk traversal)
+    path            VARCHAR(500) NOT NULL,         -- '/{root_id}/.../{parent_id}/{child_id}/'
+    depth           INTEGER NOT NULL,               -- 0=root, 1, 2, ...
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (org_id, parent_id, child_id),
-    UNIQUE (org_id, child_id)  -- one child has only one parent
+    UNIQUE (org_id, child_id)  -- one child has one parent
 );
 
 CREATE INDEX idx_branch_hierarchies_parent ON branch_hierarchies(org_id, parent_id);
@@ -105,7 +134,7 @@ CREATE INDEX idx_branch_hierarchies_child ON branch_hierarchies(org_id, child_id
 CREATE INDEX idx_branch_hierarchies_path ON branch_hierarchies(org_id, path);
 ```
 
-**Contoh hierarki:**
+**Contoh hierarki (bank dengan 5 level):**
 ```
 HEAD_OFFICE (KP Olshop)
   └── REGIONAL (Kanwil Jawa Barat)
@@ -120,13 +149,57 @@ HEAD_OFFICE (KP Olshop)
               └── ...
 ```
 
-### 2.4 `users` — Identitas User
+**Contoh hierarki (digital bank — hanya 2 level):**
+```
+HEAD_OFFICE (Head Office)
+  └── BRANCH (Branch Jakarta)
+  └── BRANCH (Branch Surabaya)
+  └── BRANCH (Branch Bandung)
+```
+```
+
+### 2.5 `user_branch_assignments` — Akses User ke Branch
+
+User bisa punya akses ke beberapa branch dengan role/permission berbeda per branch.
+Satu branch ditandai sebagai `is_primary` = default saat login.
+
+```sql
+CREATE TABLE user_branch_assignments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES users(id),
+    branch_id       UUID NOT NULL REFERENCES branches(id),
+    is_primary      BOOLEAN NOT NULL DEFAULT FALSE,  -- true = default branch saat login
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, branch_id)                       -- 1 user per branch = 1 assignment
+);
+
+-- Setiap user wajib punya minimal 1 primary branch
+-- is_primary = true hanya boleh 1 per user (enalised at application level)
+CREATE INDEX idx_user_branch_user ON user_branch_assignments(user_id);
+CREATE INDEX idx_user_branch_branch ON user_branch_assignments(branch_id);
+CREATE INDEX idx_user_branch_primary ON user_branch_assignments(user_id) WHERE is_primary = TRUE;
+```
+
+**Contoh data:**
+
+| user_id | branch_id | is_primary |
+|---------|-----------|-----------|
+| john | KC Bandung | true |
+| john | KCP Dago | false |
+| john | KC Jakarta | false |
+
+> john login → default di KC Bandung (primary).
+> john switch → bisa pilih KCP Dago atau KC Jakarta.
+> Saat switch, role/permission bisa berbeda per branch (diatur via `user_roles`).
+
+### 2.6 `users` — Identitas User
 
 ```sql
 CREATE TABLE users (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id                  UUID NOT NULL REFERENCES organizations(id),
-    branch_id               UUID REFERENCES branches(id),
+    -- branch_id dihapus dari users; lihat user_branch_assignments untuk multi-branch access
     username                VARCHAR(100) NOT NULL,
     email                   VARCHAR(255) NOT NULL,
     full_name               VARCHAR(255) NOT NULL,
@@ -151,13 +224,12 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_org_id ON users(org_id);
-CREATE INDEX idx_users_branch_id ON users(branch_id);
 CREATE INDEX idx_users_email ON users(org_id, email);
 CREATE INDEX idx_users_status ON users(org_id, status);
 CREATE INDEX idx_users_deleted ON users(deleted_at) WHERE deleted_at IS NOT NULL;
 ```
 
-### 2.5 `user_credentials` — Password & Hashes
+### 2.7 `user_credentials` — Password & Hashes
 
 ```sql
 CREATE TABLE user_credentials (
@@ -183,7 +255,7 @@ CREATE INDEX idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX idx_user_cred_history_user_id ON user_credential_history(user_id);
 ```
 
-### 2.6 `user_attributes` — Extensible User Metadata
+### 2.8 `user_attributes` — Extensible User Metadata
 
 ```sql
 CREATE TABLE user_attributes (
@@ -370,19 +442,61 @@ CREATE TABLE role_permissions (
 );
 ```
 
-### 5.5 `user_roles` — User ↔ Role Assignment
+### 5.5 `user_roles` — User ↔ Role Assignment (per Branch)
+
+Roles di-assign per user per branch, memungkinkan user punya role berbeda di cabang berbeda.
 
 ```sql
 CREATE TABLE user_roles (
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id         UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    assigned_by     UUID REFERENCES users(id),
-    assigned_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id, role_id)
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id     UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    branch_id   UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+    org_id      UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    assigned_by UUID REFERENCES users(id),
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, role_id, branch_id)
 );
 
+CREATE INDEX idx_user_roles_user ON user_roles(user_id);
+CREATE INDEX idx_user_roles_branch ON user_roles(branch_id);
 CREATE INDEX idx_user_roles_role ON user_roles(role_id);
 ```
+
+**Contoh:**
+
+| user_id | role_id | branch_id | Artinya |
+|---|---|---|---|
+| john | supervisor | KC Bandung | John = supervisor di KC Bandung |
+| john | teller | KCP Dago | John = teller di KCP Dago |
+| jane | org_admin | KP Pusat | Jane = org admin di KP Pusat |
+
+### 5.6 `permission_field_masks` — Field-Level Permission Masking
+
+```sql
+CREATE TABLE permission_field_masks (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id          UUID NOT NULL REFERENCES organizations(id),
+    resource        VARCHAR(100) NOT NULL,     -- 'account', 'customer', 'gl_account'
+    action          VARCHAR(50) NOT NULL,      -- 'read'
+    role_id         UUID REFERENCES roles(id),  -- NULL = default mask untuk role
+    fields_allowed  TEXT[],                      -- kosong = semua field allowed
+    fields_denied   TEXT[],                      -- field yang di-mask
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (org_id, resource, action, role_id)
+);
+
+CREATE INDEX idx_perm_field_masks_org ON permission_field_masks(org_id);
+CREATE INDEX idx_perm_field_masks_resource ON permission_field_masks(org_id, resource);
+```
+
+**Contoh data:**
+
+| resource | action | role | fields_denied |
+|---|---|---|---|
+| `account` | `read` | teller | `{balance, limit}` |
+| `customer` | `read` | cs | `{credit_score, internal_notes}` |
+| `account` | `read` | supervisor | `{}` (kosong = semua field) |
 
 ### 5.6 `casbin_rule` — Casbin Policy Storage
 
@@ -617,8 +731,9 @@ lockout:{user_id}                        → JSON (attempts, locked_until), TTL 
 
 | Table | Indexes | Alasan |
 |---|---|---|
-| users | org_id, branch_id, status, deleted_at | Multi-tenant queries |
-| branches | org_id, parent_id | Hierarchy queries |
+| users | org_id, status, deleted_at | Multi-tenant queries |
+| user_branch_assignments | user_id, branch_id, is_primary | Branch access queries |
+| branches | org_id, branch_type_id | Multi-tenant + type queries |
 | roles | org_id | Multi-tenant queries |
 | oauth2_clients | org_id | Multi-tenant queries |
 | authorization_codes | expires_at | Cleanup expired codes |
@@ -639,36 +754,6 @@ lockout:{user_id}                        → JSON (attempts, locked_until), TTL 
 
 ---
 
-## 12. Open Questions
-
-1. **Apakah `casbin_rules` disimpan di PostgreSQL atau file?**
-   → ✅ **KEPUTUSAN: PostgreSQL**
-   → Gunakan custom pgx adapter (bukan gorm-adapter)
-
-2. **Audit log partitioning: per bulan atau per tahun?**
-   → Per bulan (sesuai dengan workflow7 pattern)
-   → Archive partisi lama ke cold storage setelah 2 tahun
-   → Retention: 5 tahun (sesuai regulasi perbankan)
-
-3. **Encryption key management untuk TOTP secrets dan private keys?**
-   → ✅ **KEPUTUSAN: v1.0 software encryption (KEK dari env var)**
-   → v2.0: HSM atau Vault integration
-
-4. **Apakah perlu full-text search di audit logs?**
-   → v1.0: JSONB GIN index untuk structured search
-   → v2.0: Elasticsearch/OpenSearch untuk advanced search
-
-5. **Index strategy untuk `users` table yang besar?**
-   → Partial index: `WHERE deleted_at IS NULL` untuk active users
-   → Compound index: `(org_id, status, branch_id)` untuk common queries
-
-6. **Apakah perlu read replica untuk v1.0?**
-   → Tidak (bisa ditambahkan v1.1 jika diperlukan)
-
-7. **Apakah perlu full-text search untuk user lookup?**
-   → v1.0: LIKE query saja
-   → v1.1: pg_trgm + GIN index
-
----
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [07-admin-api.md](./07-admin-api.md) | Next: [09-integration.md](./09-integration.md)*

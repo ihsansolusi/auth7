@@ -277,27 +277,52 @@ Semua backup codes lama di-invalidate.
 
 ## 5. MFA Policy
 
+> **Keputusan arsitektur**: MFA policy tetap di auth7 (bukan policy7) karena erat kaitannya
+> dengan identitas dan keamanan. Policy7 menyimpan operational hours & transaction limits.
+> Auth7 menyimpan MFA policy karena ini authentication decision (YES/NO), bukan business parameter.
+
 ### 5.1 MFA Enforcement Levels
 
 ```go
 type MFAPolicy string
 const (
-    MFAPolicyOptional  = "optional"     // User bisa pilih aktifkan atau tidak
-    MFAPolicyRequired  = "required"     // Wajib MFA (banking high-privilege roles)
-    MFAPolicyAdminForced = "admin_forced" // Admin set wajib untuk user tertentu
+    MFAPolicyOptional    = "optional"      // User bisa pilih aktifkan atau tidak
+    MFAPolicyRequired    = "required"      // Wajib MFA (banking high-privilege roles)
+    MFAPolicyAdminForced = "admin_forced"  // Admin set wajib untuk user tertentu
 )
 ```
 
-### 5.2 Policy per Role
+### 5.2 Policy per Role (with User Override)
 
+MFA method bisa berbeda per role, dan admin bisa override per user:
+
+```json
+// Organization default
+{
+  "mfa_policy": {
+    "required": true,
+    "methods": ["totp", "email_otp"],
+    "allow_backup_codes": true,
+    "enrollment_on_first_login": true
+  }
+}
+
+// Role-specific defaults (stored in auth7)
+Role: teller        → policy: required, default_method: email_otp
+Role: supervisor    → policy: required, default_method: totp
+Role: manager       → policy: required, default_method: totp
+Role: org_admin     → policy: required, default_method: totp
+Role: super_admin   → policy: required, default_method: totp
+
+// User-specific override (stored in auth7)
+User: john (teller) → default_method: totp (admin override: john lebih prefer TOTP)
+User: maria (teller) → policy: required, default_method: email_otp (standard)
 ```
-Contoh policy untuk banking:
-  - teller: optional (direkomendasikan)
-  - supervisor: required
-  - manager: required
-  - org_admin: required
-  - super_admin: required
-```
+
+**Override hierarchy** (paling spesifik menang):
+1. User-specific override → prioritas tertinggi
+2. Role default → prioritas kedua
+3. Organization default → fallback
 
 ### 5.3 MFA Enrollment Reminder
 
@@ -515,38 +540,6 @@ func (d *Dispatcher) Send(ctx context.Context, e SecurityEvent) {
 
 ---
 
-## 12. Open Questions
-
-1. **Apakah TOTP secret bisa di-view ulang setelah enrollment?**
-   → Tidak. User harus unenroll dan enroll ulang jika setup baru diperlukan.
-
-2. **Email OTP: kapan?**
-   → ✅ **KEPUTUSAN: Masuk v1.0**
-   → Delivery via **auth7 internal SMTP mailer** (bukan notif7)
-   → Email OTP adalah pre-login MFA factor — dikirim ke email address user sebelum user punya session aktif.
-      notif7 membutuhkan user JWT (post-login) — tidak bisa dipakai untuk Email OTP.
-   → Lihat Section 3 untuk implementasi detail.
-
-3. **Apakah perlu "trusted device" feature?**
-   → ✅ **KEPUTUSAN: Tidak**
-   → MFA setiap login, banking-grade security
-   → Tidak ada skip MFA untuk device yang sama
-
-4. **Grace period setelah setup MFA?**
-   → Tidak perlu. Setelah setup, langsung berlaku di login berikutnya.
-
-5. **Apakah recovery via admin perlu dual approval?**
-   → Banking: Ya, untuk sensitive actions seperti MFA reset
-   → Bisa diintegrasikan dengan workflow7 approval flow di v2.0
-
-6. **Apakah perlu SMS OTP?**
-   → v1.0: Tidak
-   → v1.1: Mungkin (via SMS gateway)
-
-7. **Bagaimana jika user kehilangan authenticator device DAN backup codes?**
-   → Contact admin untuk manual reset
-   → Admin dapat reset MFA via admin panel
-
----
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [05-session-token.md](./05-session-token.md) | Next: [07-admin-api.md](./07-admin-api.md)*

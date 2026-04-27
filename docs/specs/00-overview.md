@@ -125,17 +125,44 @@ cmd/ → internal/api/ → internal/service/ → internal/store/ → internal/do
 - Semua password di-hash dengan **Argon2id** (bukan bcrypt)
 - Token disimpan dengan enkripsi at-rest (AES-256-GCM)
 - Rate limiting per-IP dan per-user
-- Brute force protection: lockout setelah 5 gagal
+- Brute force protection: progressive delays (3→1min, 5→5min, 10→locked)
 - Audit trail tidak dapat dihapus (append-only, 5 tahun)
 
 ### 5.4 Multi-Tenant (Bank/Cabang Model)
 ```
 Organization (Bank)
-  └── Branch (Cabang)
+  └── Branch (kantor — type & hierarchy configurable per org)
         └── User
-              └── Roles
+              └── Roles (per branch)
 ```
-Setiap request auth di-scope ke `org_id` dan `branch_id`.
+
+**Branch types** dikonfigurasi per organization via tabel `branch_types`:
+
+| Field | Keterangan |
+|---|---|
+| `code` | Kode internal, e.g. `HEAD_OFFICE`, `BRANCH` |
+| `label` | Nama tampilan, e.g. "Kantor Pusat", "Kantor Cabang" |
+| `short_code` | Singkatan, e.g. "KP", "KC" |
+| `level` | Level hierarki (0 = tertinggi, makin besar = makin rendah) |
+| `is_operational` | Apakah melakukan transaksi nasabah |
+| `can_have_children` | Apakah bisa punya sub-branch |
+
+**Multi-branch access:** User bisa punya akses ke beberapa branch dengan role/permission berbeda per branch.
+Saat login, user masuk ke primary branch. User bisa switch branch via menu (re-auth required).
+
+- `user_branch_assignments` table: relasi user ↔ branch dengan `is_primary` flag
+- Role/permission scoped per branch (diatur di `user_roles` + `branch_id`)
+- Saat switch branch: re-auth (password) + update session + invalidate permission cache
+
+**Contoh konfigurasi bank konvensional (5 level):**
+KP (level 0) → KW (level 1, non-operasional) → KC (level 2) → KCP (level 3) → KK (level 4)
+
+**Contoh konfigurasi bank digital (2 level):**
+Head Office (level 0) → Branch (level 1)
+
+- Hierarki parent-child disimpan di `branch_hierarchies` (menggunakan `path` traversal)
+- Setiap request auth di-scope ke `org_id` dan `active_branch_id`
+- Hierarki parent-child disimpan di `branch_hierarchies` (menggunakan `path` traversal)
 
 ### 5.5 Standards Compliant
 - **OAuth 2.0**: RFC 6749, RFC 7636 (PKCE), RFC 7009 (Token Revocation), RFC 7591 (DCR)

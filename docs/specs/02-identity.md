@@ -25,87 +25,12 @@ Namun di v1.0, kita sederhanakan: **1 user = 1 account = 1 org/branch**.
 
 ---
 
-## 2. User Lifecycle
-
-### 1.1 States
-
-```
-[Created] → [Pending Verification] → [Active] → [Inactive/Suspended] → [Soft Deleted]
-                 ↓
-           [Email Verified]
-```
-
-| State | Deskripsi |
-|---|---|
-| `Created` | User dibuat oleh admin, belum setup password |
-| `Pending Verification` | Email verification token dikirim |
-| `Active` | User bisa login, email verified, password setup |
-| `Inactive` | User dinonaktifkan (suspend), tidak bisa login |
-| `Soft Deleted` | User dihapus (soft), data tetap untuk audit |
-
-### 1.2 Flow: Admin-Created User
-
-```
-Admin                   auth7-svc               Email
-  │                        │                       │
-  │  1. POST /admin/v1/    │                       │
-  │     users              │                       │
-  │     {user_data}        │                       │
-  │───────────────────────►│                       │
-  │                        │                       │
-  │  2. Create user        │                       │
-  │     + generate temp    │                       │
-  │     password           │                       │
-  │     + send welcome     │                       │
-  │     email              │                       │
-  │                        │──────────────────────►│
-  │                        │                       │
-  │  3. Return user object │                       │
-  │◄───────────────────────│                       │
-```
-
-### 1.3 Flow: First-Time Login
-
-```
-User                    auth7-ui                auth7-svc
-  │                        │                       │
-  │  1. Klik link dari     │                       │
-  │     email              │                       │
-  │───────────────────────────────────────────────►│
-  │   GET /verify/         │                       │
-  │   setup-password/      │                       │
-  │   {token}              │                       │
-  │                        │                       │
-  │  2. Verify token       │                       │
-  │     + redirect ke      │                       │
-  │     setup password     │                       │
-  │◄───────────────────────────────────────────────│
-  │                        │                       │
-  │  3. Input new password │                       │
-  │     + confirm          │                       │
-  │───────────────────────►│                       │
-  │                        │                       │
-  │  4. POST /api/v1/      │                       │
-  │     auth/setup-password│                       │
-  │     {token, password}  │                       │
-  │───────────────────────────────────────────────►│
-  │                        │                       │
-  │  5. Update password    │                       │
-  │     + mark verified    │                       │
-  │     + redirect ke      │                       │
-  │     MFA setup          │                       │
-  │◄───────────────────────────────────────────────│
-```
-
----
-
 ## 2. User Entity
 
 ```go
 type User struct {
     ID              uuid.UUID
     OrgID           uuid.UUID
-    BranchID        *uuid.UUID  // nullable (admin pusat)
     Username        string
     Email           string
     FullName        string
@@ -124,16 +49,49 @@ type User struct {
 
 type UserStatus string
 const (
-    UserStatusActive              UserStatus = "active"
-    UserStatusInactive            UserStatus = "inactive"
-    UserStatusLocked              UserStatus = "locked"           // brute force
-    UserStatusPendingVerification UserStatus = "pending_verification"
-    UserStatusSuspended           UserStatus = "suspended"        // admin action
-    UserStatusDeleted             UserStatus = "deleted"
+    UserStatusCreated              UserStatus = "created"                // admin-created, belum setup password
+    UserStatusPendingVerification UserStatus = "pending_verification"  // menunggu email verification
+    UserStatusActive               UserStatus = "active"               // bisa login
+    UserStatusInactive             UserStatus = "inactive"             // dinonaktifkan
+    UserStatusLocked               UserStatus = "locked"              // brute force lockout
+    UserStatusSuspended            UserStatus = "suspended"            // admin suspend
+    UserStatusDeleted              UserStatus = "deleted"              // soft delete
 )
+
+// Multi-branch: user bisa akses beberapa branch dengan role/permission berbeda
+type UserBranchAssignment struct {
+    UserID    uuid.UUID
+    BranchID  uuid.UUID
+    IsPrimary bool      // true = default branch saat login (hanya 1 per user)
+}
+
+// Contoh: John punya akses ke 3 branch
+// KC Bandung  (primary, role: supervisor)
+// KCP Dago    (role: teller)
+// KC Jakarta  (role: supervisor)
 ```
 
-### 2.1 User Attributes (extensible)
+### 2.1 User Lifecycle States
+
+```
+[Created] ──► [Pending Verification] ──► [Active] ──► [Inactive/Suspended] ──► [Soft Deleted]
+                      │                                    ▲
+                      └── [Email Verified] ────────────────┘
+                                                          │
+                      [Locked (brute force)] ──► [Active] (admin unlock)
+```
+
+| State | Deskripsi |
+|---|---|
+| `Created` | User dibuat oleh admin, belum setup password |
+| `Pending Verification` | Email verification token dikirim |
+| `Active` | User bisa login, email verified, password setup |
+| `Inactive` | User dinonaktifkan, tidak bisa login |
+| `Locked` | User dikunci karena brute force, unlock oleh admin |
+| `Suspended` | User disuspend oleh admin |
+| `Deleted` | Soft delete, data tetap untuk audit |
+
+### 2.2 User Attributes (extensible)
 ```go
 type UserAttribute struct {
     UserID uuid.UUID
@@ -233,7 +191,7 @@ POST /api/v1/auth/login
   "access_token": "eyJ...",
   "refresh_token": "eyJ...",
   "token_type": "Bearer",
-  "expires_in": 3600,
+  "expires_in": 900,
   "session_id": "uuid",
   "user": {
     "id": "uuid",
@@ -376,15 +334,16 @@ PUT /api/v1/me
 ### 5.1 Session Metadata
 ```go
 type Session struct {
-    ID          uuid.UUID
-    UserID      uuid.UUID
-    OrgID       uuid.UUID
-    IPAddress   string
-    UserAgent   string
-    DeviceInfo  string    // parsed dari User-Agent
-    CreatedAt   time.Time
-    ExpiresAt   time.Time
-    LastUsedAt  time.Time
+    ID              uuid.UUID
+    UserID          uuid.UUID
+    OrgID           uuid.UUID
+    ActiveBranchID  uuid.UUID   // branch yang sedang aktif saat ini
+    IPAddress       string
+    UserAgent       string
+    DeviceInfo      string    // parsed dari User-Agent
+    CreatedAt       time.Time
+    ExpiresAt       time.Time
+    LastUsedAt      time.Time
 }
 ```
 
@@ -393,6 +352,51 @@ type Session struct {
 GET    /api/v1/me/sessions          # list sessions
 DELETE /api/v1/me/sessions/:id      # revoke specific session
 DELETE /api/v1/me/sessions          # revoke all sessions (except current)
+```
+
+### 5.3 Multi-Branch Access & Switching
+
+User bisa punya akses ke beberapa branch. Satu branch sebagai `is_primary` (default saat login).
+Saat user switch branch, diperlukan **re-authentication** (password atau MFA) untuk keamanan banking.
+
+**Login flow (default branch):**
+```
+1. User login → JWT claim berisi: user_id, org_id, branch_id (primary)
+2. Session disimpan di Redis: {user_id, active_branch_id: primary_branch_id}
+3. Frontend menampilkan dropdown branch yang bisa diakses
+```
+
+**Switch branch flow:**
+```
+POST /api/v1/auth/switch-branch
+{
+  "target_branch_id": "uuid",
+  "password": "..."       // re-auth required
+}
+
+Steps:
+1. Validate: target_branch_id ada di user_branch_assignments
+2. Verify password (re-auth)
+3. Update session: active_branch_id = target_branch_id
+4. Issue new JWT dengan branch_id baru (optional, bisa juga lewat session only)
+5. Invalidate cached permissions (role/permission bisa beda per branch)
+6. Insert audit: user.switch_branch
+7. Return new access_token + updated session
+```
+
+**Rules:**
+- User wajib punya minimal 1 branch assignment (primary)
+- `is_primary` hanya boleh 1 per user (application-level enforcement)
+- Saat user dibuat admin, wajib assign minimal 1 branch
+- Role/permission bisa berbeda per branch (diatur via `user_roles` yang include `branch_id`)
+- Switch branch tanpa re-auth → ditolak (HTTP 401)
+
+**Admin API untuk branch assignments:**
+```
+GET    /admin/v1/users/:id/branches          # list branch assignments
+POST   /admin/v1/users/:id/branches          # assign branch {branch_id, is_primary}
+PUT    /admin/v1/users/:id/branches/:bid      # update assignment (set primary, dll)
+DELETE /admin/v1/users/:id/branches/:bid      # revoke branch access
 ```
 
 ---
@@ -423,83 +427,9 @@ POST /admin/v1/users/:id/reset-password
 
 ---
 
-## 7. User Lifecycle States
+## 7. Credential Management
 
-### 7.1 States
-
-```
-[Created] → [Pending Verification] → [Active] → [Inactive/Suspended] → [Soft Deleted]
-                 ↓
-           [Email Verified]
-```
-
-| State | Deskripsi |
-|---|---|
-| `Created` | User dibuat oleh admin, belum setup password |
-| `Pending Verification` | Email verification token dikirim |
-| `Active` | User bisa login, email verified, password setup |
-| `Inactive` | User dinonaktifkan (suspend), tidak bisa login |
-| `Soft Deleted` | User dihapus (soft), data tetap untuk audit |
-
-### 7.2 Flow: Admin-Created User
-
-```
-Admin                   auth7-svc               Email
-  │                        │                       │
-  │  1. POST /admin/v1/    │                       │
-  │     users              │                       │
-  │     {user_data}        │                       │
-  │───────────────────────►│                       │
-  │                        │                       │
-  │  2. Create user        │                       │
-  │     + generate temp    │                       │
-  │     password           │                       │
-  │     + send welcome     │                       │
-  │     email              │                       │
-  │                        │──────────────────────►│
-  │                        │                       │
-  │  3. Return user object │                       │
-  │◄───────────────────────│                       │
-```
-
-### 7.3 Flow: First-Time Login
-
-```
-User                    auth7-ui                auth7-svc
-  │                        │                       │
-  │  1. Klik link dari     │                       │
-  │     email              │                       │
-  │───────────────────────────────────────────────►│
-  │   GET /verify/         │                       │
-  │   setup-password/      │                       │
-  │   {token}              │                       │
-  │                        │                       │
-  │  2. Verify token       │                       │
-  │     + redirect ke      │                       │
-  │     setup password     │                       │
-  │◄───────────────────────────────────────────────│
-  │                        │                       │
-  │  3. Input new password │                       │
-  │     + confirm          │                       │
-  │───────────────────────►│                       │
-  │                        │                       │
-  │  4. POST /api/v1/      │                       │
-  │     auth/setup-password│                       │
-  │     {token, password}  │                       │
-  │───────────────────────────────────────────────►│
-  │                        │                       │
-  │  5. Update password    │                       │
-  │     + mark verified    │                       │
-  │     + redirect ke      │                       │
-  │     MFA setup          │                       │
-  │◄───────────────────────────────────────────────│
-```
-
----
-
-## 8. Credential Management
-
-### 8.1 Password Hashing
+### 7.1 Password Hashing
 
 - **Algorithm**: Argon2id (bukan bcrypt)
 - **Parameters**:
@@ -509,7 +439,7 @@ User                    auth7-ui                auth7-svc
   - Key length: 32 bytes
   - Salt length: 16 bytes
 
-### 8.2 Password Policy
+### 7.2 Password Policy
 
 - Minimal 8 karakter, maksimal 128
 - Harus mengandung: huruf besar, huruf kecil, angka
@@ -519,9 +449,9 @@ User                    auth7-ui                auth7-svc
 
 ---
 
-## 9. Bulk Import (CSV)
+## 8. Bulk Import (CSV)
 
-### 9.1 CSV Format
+### 8.1 CSV Format
 
 ```csv
 username,email,full_name,branch_code,roles
@@ -529,7 +459,7 @@ john.doe,john@bank.co.id,John Doe,BDG,teller;supervisor
 jane.smith,jane@bank.co.id,Jane Smith,JKT,org_admin
 ```
 
-### 9.2 Flow
+### 8.2 Flow
 
 ```
 Admin                   auth7-svc
@@ -552,14 +482,14 @@ Admin                   auth7-svc
   │◄───────────────────────│
 ```
 
-### 9.3 Duplicate Handling
+### 8.3 Duplicate Handling
 
 - Duplicate username/email → skip row dengan error message
 - Tidak ada auto-update existing user
 
 ---
 
-## 10. User Impersonation (v1.1)
+## 9. User Impersonation (v1.1)
 
 - Admin bisa "act as" user via RFC 8693 token exchange
 - Full audit trail: siapa yang impersonate, kapan, berapa lama
@@ -568,7 +498,7 @@ Admin                   auth7-svc
 
 ---
 
-## 11. Soft Delete
+## 10. Soft Delete
 
 - User dihapus → set `deleted_at` + status `deleted`
 - Data tetap ada untuk audit trail
@@ -577,33 +507,6 @@ Admin                   auth7-svc
 
 ---
 
-## 12. Open Questions
-
-1. **Apakah perlu user profile fields tambahan (phone, address, photo)?**
-   → v1.0: minimal (full_name, email, username)
-   → v1.1: extended profile
-
-2. **Apakah perlu approval workflow untuk user creation?**
-   → v1.0: Tidak (langsung create)
-   → v2.0: Integrasi workflow7
-
-3. **Username bisa diubah oleh admin?**
-   → Rekomendasi: tidak, username adalah immutable identifier
-
-4. **Email change: verifikasi ulang diperlukan?**
-   → Ya, email baru harus di-verify sebelum aktif
-
-5. **Apakah perlu user impersonation untuk support/debug?**
-   → v1.1: admin bisa "act as" user dengan audit trail lengkap
-
-6. **User deletion: hard delete atau soft delete?**
-   → Soft delete (banking requirement: data tidak boleh dihapus)
-   → Status: `deleted`, semua audit tetap tersimpan
-
-7. **Apakah perlu user search/filter yang advanced?**
-   → v1.0: filter by status, org, branch, username/email search
-   → v1.1: full-text search, attribute-based filter
-
----
+> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 *Prev: [01-architecture.md](./01-architecture.md) | Next: [03-oauth2-oidc.md](./03-oauth2-oidc.md)*
