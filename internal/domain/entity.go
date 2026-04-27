@@ -306,10 +306,15 @@ type BranchType struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+func (bt *BranchType) ValidateCode() bool {
+	return len(bt.Code) >= 2 && len(bt.Code) <= 50
+}
+
 type Branch struct {
 	ID           uuid.UUID  `json:"id"`
 	OrgID        uuid.UUID  `json:"org_id"`
 	BranchTypeID uuid.UUID  `json:"branch_type_id"`
+	ParentID     *uuid.UUID `json:"parent_id,omitempty"`
 	Code         string     `json:"code"`
 	Name         string     `json:"name"`
 	Status       string     `json:"status"`
@@ -318,6 +323,27 @@ type Branch struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+}
+
+type BranchStatus string
+
+const (
+	BranchStatusActive   BranchStatus = "active"
+	BranchStatusInactive BranchStatus = "inactive"
+	BranchStatusPending  BranchStatus = "pending"
+	BranchStatusClosed   BranchStatus = "closed"
+)
+
+func (b *Branch) IsActive() bool {
+	return b.Status == string(BranchStatusActive)
+}
+
+func (b *Branch) HasParent() bool {
+	return b.ParentID != nil
+}
+
+func (b *Branch) ValidateCode() bool {
+	return len(b.Code) >= 2 && len(b.Code) <= 20
 }
 
 type BranchHierarchy struct {
@@ -331,10 +357,25 @@ type BranchHierarchy struct {
 }
 
 type UserBranchAssignment struct {
-	ID         uuid.UUID `json:"id"`
-	UserID     uuid.UUID `json:"user_id"`
-	BranchID   uuid.UUID `json:"branch_id"`
-	IsPrimary  bool      `json:"is_primary"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         uuid.UUID  `json:"id"`
+	UserID     uuid.UUID  `json:"user_id"`
+	BranchID   uuid.UUID  `json:"branch_id"`
+	OrgID      uuid.UUID  `json:"org_id"`
+	Role       string     `json:"role"`
+	IsPrimary  bool       `json:"is_primary"`
+	AssignedBy uuid.UUID  `json:"assigned_by"`
+	AssignedAt time.Time  `json:"assigned_at"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+	RevokedBy  *uuid.UUID `json:"revoked_by,omitempty"`
+}
+
+const (
+	UserBranchRoleTeller     = "teller"
+	UserBranchRoleSupervisor  = "supervisor"
+	UserBranchRoleManager     = "manager"
+	UserBranchRoleAdmin       = "admin"
+)
+
+func (uba *UserBranchAssignment) IsActive() bool {
+	return uba.RevokedAt == nil
 }

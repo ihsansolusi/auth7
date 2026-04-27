@@ -64,6 +64,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine, deps ServerDeps) {
 	r.GET("/.well-known/openid-configuration", s.handleOIDCDiscovery)
 
 	s.RegisterOAuth2Routes(r)
+	s.RegisterBranchRoutes(r)
 }
 
 func (s *Server) handleJWKS(c *gin.Context) {
