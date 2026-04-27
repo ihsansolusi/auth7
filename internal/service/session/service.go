@@ -232,6 +232,16 @@ func (s *Service) RevokeAllUserSessions(ctx context.Context, userID string) erro
 	return nil
 }
 
+func (s *Service) RevokeAllOrgSessions(ctx context.Context, orgID string) error {
+	const op = "session.Service.RevokeAllOrgSessions"
+
+	if err := s.sessionStore.DeleteByOrg(ctx, orgID); err != nil {
+		return fmt.Errorf("%s: delete org sessions: %w", op, err)
+	}
+
+	return nil
+}
+
 func (s *Service) GetSession(ctx context.Context, sessionID string) (*SessionData, error) {
 	return s.sessionStore.Get(ctx, sessionID)
 }

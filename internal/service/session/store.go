@@ -220,3 +220,32 @@ func (s *Store) ExtendTTL(ctx context.Context, sessionID string, extension time.
 
 	return s.redis.Set(ctx, s.sessionKey(sessionID), jsonData, extension).Err()
 }
+
+func (s *Store) DeleteByOrg(ctx context.Context, orgID string) error {
+	const op = "session.Store.DeleteByOrg"
+
+	pattern := "session:*"
+	iter := s.redis.Scan(ctx, 0, pattern, 100).Iterator()
+
+	for iter.Next(ctx) {
+		data, err := s.redis.Get(ctx, iter.Val()).Bytes()
+		if err != nil {
+			continue
+		}
+
+		var session SessionData
+		if err := json.Unmarshal(data, &session); err != nil {
+			continue
+		}
+
+		if session.OrgID == orgID {
+			s.redis.Del(ctx, iter.Val())
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	return nil
+}

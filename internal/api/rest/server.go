@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
+	"github.com/ihsansolusi/auth7/internal/api/middleware"
 	"github.com/ihsansolusi/auth7/pkg/config"
 	"github.com/ihsansolusi/lib7-service-go/metrics"
 	"github.com/ihsansolusi/lib7-service-go/logging"
@@ -13,16 +14,17 @@ import (
 )
 
 type ServerDeps struct {
-	Service any
-	DB      any
-	Logger  zerolog.Logger
-	Tracer  trace.Tracer
-	Metrics *metrics.Registry
-	AuditLogger *logging.AuditLogger
-	TokenMaker  token.Maker
-	JWTSvc     any
-	SessionSvc any
-	Config     *config.Config
+	Service      any
+	DB           any
+	Logger       zerolog.Logger
+	Tracer       trace.Tracer
+	Metrics      *metrics.Registry
+	AuditLogger  *logging.AuditLogger
+	TokenMaker   token.Maker
+	JWTSvc       any
+	SessionSvc   any
+	Config       *config.Config
+	RedisClient  any
 }
 
 type Server struct {
@@ -52,6 +54,10 @@ func NewServer(deps ServerDeps) *Server {
 func (s *Server) RegisterRoutes(r *gin.Engine, deps ServerDeps) {
 	s.deps = deps
 
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.NewRateLimiter(nil).IPLimit())
+
 	r.GET("/health/live", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -65,6 +71,14 @@ func (s *Server) RegisterRoutes(r *gin.Engine, deps ServerDeps) {
 
 	s.RegisterOAuth2Routes(r)
 	s.RegisterBranchRoutes(r)
+
+	admin := r.Group("/admin")
+	admin.Use(middleware.NewRateLimiter(nil).AdminLimit())
+	{
+		if emergencyHandler := NewEmergencyHandler(nil); emergencyHandler != nil {
+			emergencyHandler.RegisterRoutes(admin)
+		}
+	}
 }
 
 func (s *Server) handleJWKS(c *gin.Context) {
