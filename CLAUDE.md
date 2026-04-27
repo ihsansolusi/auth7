@@ -38,6 +38,8 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | GitHub Issues Created | **✅ DONE** | All issues linked to Project #8 |
 | Plan 01 — Foundation | **✅ DONE** | Issues #12-21, completed 2026-04-27 |
 | Plan 02 — Identity Core | **✅ DONE** | Issues #22-29, completed 2026-04-27 |
+| Plan 03 — Session & Token Management | **✅ DONE** | Issues #30-37, completed 2026-04-27 |
+| Plan 04 — OAuth2/OIDC Server | **✅ DONE** | Issues #38-44, completed 2026-04-27 |
 
 ### Plan Status
 
@@ -46,7 +48,7 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | [Plan 01](./docs/plans/PLAN-01.md) | ✅ DONE | [#2](https://github.com/ihsansolusi/auth7/issues/2) | #12-21 (10) |
 | [Plan 02](./docs/plans/PLAN-02.md) | ✅ DONE | [#3](https://github.com/ihsansolusi/auth7/issues/3) | #22-29 (8) |
 | Plan 03 — Session & Token Management | ✅ DONE | [#4](https://github.com/ihsansolusi/auth7/issues/4) | #30-37 (8) |
-| [Plan 04](./docs/plans/PLAN-04.md) | 📋 Planned | [#5](https://github.com/ihsansolusi/auth7/issues/5) | #38-44 (7) |
+| [Plan 04](./docs/plans/PLAN-04.md) | ✅ DONE | [#5](https://github.com/ihsansolusi/auth7/issues/5) | #38-44 (7) |
 | [Plan 05](./docs/plans/PLAN-05.md) | 📋 Planned | [#6](https://github.com/ihsansolusi/auth7/issues/6) | #45-50 (6) |
 | [Plan 06](./docs/plans/PLAN-06.md) | 📋 Planned | [#7](https://github.com/ihsansolusi/auth7/issues/7) | #51-57 (7) |
 | [Plan 07](./docs/plans/PLAN-07.md) | 📋 Planned | [#8](https://github.com/ihsansolusi/auth7/issues/8) | #58-66 (9) |
