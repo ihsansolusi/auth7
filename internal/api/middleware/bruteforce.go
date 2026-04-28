@@ -64,6 +64,7 @@ func (bf *BruteForceProtector) RecordSuccess(ctx context.Context, username, ip s
 	pipe := bf.redis.Pipeline()
 
 	pipe.Del(ctx, userKey)
+	pipe.Del(ctx, ipKey)
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {

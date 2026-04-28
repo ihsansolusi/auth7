@@ -106,7 +106,7 @@ func (h *MFAHandler) EnrollEmailOTP(c *gin.Context) {
 		return
 	}
 
-	code, err := h.mfaSvc.EnrollEmailOTP(c.Request.Context(), mfa.EnrollEmailOTPInput{
+	_, err = h.mfaSvc.EnrollEmailOTP(c.Request.Context(), mfa.EnrollEmailOTPInput{
 		UserID: userID,
 		Email:  req.Email,
 	})

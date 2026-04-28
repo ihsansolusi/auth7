@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/ihsansolusi/auth7/proto/auth/v1;authv1";
+
+service AuthCheckService {
+    rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+    rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse);
+    rpc CheckDataAccess(CheckDataAccessRequest) returns (CheckDataAccessResponse);
+}
+
+message CheckPermissionRequest {
+    string user_id = 1;
+    string permission = 2;
+    string branch_id = 3;
+    string org_id = 4;
+}
+
+message CheckPermissionResponse {
+    bool allowed = 1;
+    string reason = 2;
+    repeated FieldMask field_masks = 3;
+}
+
+message FieldMask {
+    string field = 1;
+    string mask_value = 2;
+    string reason = 3;
+}
+
+message GetUserPermissionsRequest {
+    string user_id = 1;
+    string branch_id = 2;
+    string org_id = 3;
+}
+
+message GetUserPermissionsResponse {
+    repeated string permissions = 1;
+    repeated string roles = 2;
+    string branch_scope = 3;
+}
+
+message CheckDataAccessRequest {
+    string user_id = 1;
+    string permission = 2;
+    string resource_type = 3;
+    string resource_id = 4;
+    string branch_id = 5;
+    string org_id = 6;
+}
+
+message CheckDataAccessResponse {
+    bool allowed = 1;
+    string reason = 2;
+    string branch_scope = 3;
+    repeated FieldMask field_masks = 4;
+}
