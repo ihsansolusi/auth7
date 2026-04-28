@@ -41,6 +41,11 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | Plan 03 — Session & Token Management | **✅ DONE** | Issues #30-37, completed 2026-04-27 |
 | Plan 04 — OAuth2/OIDC Server | **✅ DONE** | Issues #38-44, completed 2026-04-27 |
 | Plan 05 — Multi-Branch & Branch Management | **✅ DONE** | Issues #45-50, completed 2026-04-28 |
+| Plan 06 — MFA (TOTP + Email OTP) | **✅ DONE** | Issues #51-57, completed 2026-04-28 |
+| Plan 07 — Authorization (RBAC + ABAC) | **✅ DONE** | Issues #58-66, completed 2026-04-28 |
+| Plan 08 — Admin API | **✅ DONE** | Issues #67-75, completed 2026-04-28 |
+| Plan 09 — Security & Brute Force Protection | **✅ DONE** | Issues #76-81, completed 2026-04-28 |
+| Plan 10 — Integration & lib7-auth-go | **✅ DONE** | Issues #82-91, completed 2026-04-28 |
 
 ### Plan Status
 
@@ -52,10 +57,10 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | [Plan 04](./docs/plans/PLAN-04.md) | ✅ DONE | [#5](https://github.com/ihsansolusi/auth7/issues/5) | #38-44 (7) |
 | [Plan 05](./docs/plans/PLAN-05.md) | ✅ DONE | [#6](https://github.com/ihsansolusi/auth7/issues/6) | #45-50 (6) |
 | Plan 06 — MFA (TOTP + Email OTP + Backup Codes) | ✅ DONE | [#7](https://github.com/ihsansolusi/auth7/issues/7) | #51-57 (7) |
-| [Plan 07](./docs/plans/PLAN-07.md) | 📋 Planned | [#8](https://github.com/ihsansolusi/auth7/issues/8) | #58-66 (9) |
+| [Plan 07](./docs/plans/PLAN-07.md) | ✅ DONE | [#8](https://github.com/ihsansolusi/auth7/issues/8) | #58-66 (9) |
 | [Plan 08](./docs/plans/PLAN-08.md) | ✅ DONE | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
 | [Plan 09](./docs/plans/PLAN-09.md) | ✅ DONE | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
-| [Plan 10](./docs/plans/PLAN-10.md) | 📋 Planned | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
+| [Plan 10](./docs/plans/PLAN-10.md) | ✅ DONE | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
 | [Plan 11](./docs/plans/PLAN-11.md) | 📋 Planned | [#92](https://github.com/ihsansolusi/auth7/issues/92) | #93-104 (12) |
 | **[Plan 12](./docs/plans/PLAN-12.md)** | 📋 **NEW** | [#105](https://github.com/ihsansolusi/auth7/issues/105) | **#106-112 (7)** |
 
