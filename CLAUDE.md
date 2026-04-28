@@ -5,7 +5,7 @@ Panduan konteks untuk Claude AI saat bekerja di repo `ihsansolusi/auth7`.
 ## Identitas Proyek
 
 - **Nama**: Auth7 — Identity & Access Management Platform untuk Core7
-- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-09 complete, Plan 10 ready to start
+- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-06 complete, Plan 07 ready to start
 - **Planning Status**: ✅ **COMPLETE** — All specs reviewed, 12 plans, 111 GitHub issues
 - **Implementation Start**: ✅ COMPLETE — Plans 01 & 02 finished (2026-04-27)
 - **Root Issue**: [#1 — Auth7 v1.0](https://github.com/ihsansolusi/auth7/issues/1)
@@ -51,7 +51,7 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | Plan 03 — Session & Token Management | ✅ DONE | [#4](https://github.com/ihsansolusi/auth7/issues/4) | #30-37 (8) |
 | [Plan 04](./docs/plans/PLAN-04.md) | ✅ DONE | [#5](https://github.com/ihsansolusi/auth7/issues/5) | #38-44 (7) |
 | [Plan 05](./docs/plans/PLAN-05.md) | ✅ DONE | [#6](https://github.com/ihsansolusi/auth7/issues/6) | #45-50 (6) |
-| [Plan 06](./docs/plans/PLAN-06.md) | 📋 Planned | [#7](https://github.com/ihsansolusi/auth7/issues/7) | #51-57 (7) |
+| Plan 06 — MFA (TOTP + Email OTP + Backup Codes) | ✅ DONE | [#7](https://github.com/ihsansolusi/auth7/issues/7) | #51-57 (7) |
 | [Plan 07](./docs/plans/PLAN-07.md) | 📋 Planned | [#8](https://github.com/ihsansolusi/auth7/issues/8) | #58-66 (9) |
 | [Plan 08](./docs/plans/PLAN-08.md) | 📋 Planned | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
 | [Plan 09](./docs/plans/PLAN-09.md) | ✅ DONE | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
