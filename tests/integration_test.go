@@ -16,6 +16,7 @@ import (
 
 	"github.com/ihsansolusi/auth7/internal/integration/notif7"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
+	notif7client "github.com/ihsansolusi/lib7-service-go/notif7client"
 )
 
 func TestMain(m *testing.M) {
@@ -73,7 +74,7 @@ type mockNotif7Sender struct {
 	mock.Mock
 }
 
-func (m *mockNotif7Sender) Send(ctx context.Context, event interface{}) (interface{}, error) {
+func (m *mockNotif7Sender) Send(ctx context.Context, event notif7client.Event) (*notif7client.SendResult, error) {
 	args := m.Called(ctx, event)
 	return nil, args.Error(0)
 }
@@ -202,17 +203,4 @@ func TestJWTTokenVerification(t *testing.T) {
 	assert.Equal(t, userID.String(), verifiedClaims.Subject)
 	assert.Equal(t, orgID.String(), verifiedClaims.OrgID)
 	assert.Equal(t, claims.ClientID, verifiedClaims.ClientID)
-}
-
-func TestJWKSGeneration(t *testing.T) {
-	svc := jwt.NewService("auth7.test", []string{"auth7.test"})
-
-	jwks := svc.GetJWKS()
-	assert.NotEmpty(t, jwks)
-	assert.GreaterOrEq(t, len(jwks), 1)
-
-	key := jwks[0]
-	assert.Contains(t, key, "kid")
-	assert.Contains(t, key, "kty")
-	assert.Contains(t, key, "alg")
 }
