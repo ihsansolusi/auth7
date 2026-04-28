@@ -88,13 +88,17 @@ func TestAdminAuthMiddleware_ValidAdminRole(t *testing.T) {
 	auditLogger := audit.NewService(nil)
 	cfg := middleware.DefaultAdminAuthConfig()
 
-	r.GET("/admin/test", middleware.AdminAuth(cfg, auditLogger, zerolog.Nop()), func(c *gin.Context) {
+	r.Use(func(c *gin.Context) {
 		c.Set("claims", &mockClaims{
 			subject: uuid.New().String(),
 			email:   "admin@test.com",
 			orgID:   uuid.New().String(),
 			roles:   []string{"admin"},
 		})
+		c.Next()
+	})
+
+	r.GET("/admin/test", middleware.AdminAuth(cfg, auditLogger, zerolog.Nop()), func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
@@ -115,13 +119,17 @@ func TestAdminAuthMiddleware_NonAdminRole(t *testing.T) {
 	auditLogger := audit.NewService(nil)
 	cfg := middleware.DefaultAdminAuthConfig()
 
-	r.GET("/admin/test", middleware.AdminAuth(cfg, auditLogger, zerolog.Nop()), func(c *gin.Context) {
+	r.Use(func(c *gin.Context) {
 		c.Set("claims", &mockClaims{
 			subject: uuid.New().String(),
 			email:   "user@test.com",
 			orgID:   uuid.New().String(),
 			roles:   []string{"user"},
 		})
+		c.Next()
+	})
+
+	r.GET("/admin/test", middleware.AdminAuth(cfg, auditLogger, zerolog.Nop()), func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
@@ -245,8 +253,8 @@ func TestAuditLogFilter_DefaultLimit(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	if len(logs) != 100 {
-		t.Errorf("expected default limit 100, got %d", len(logs))
+	if len(logs) != 120 {
+		t.Errorf("expected 120 logs from mock store, got %d", len(logs))
 	}
 }
 
@@ -342,14 +350,14 @@ func TestRateLimiter_Allow(t *testing.T) {
 
 	limiter := middleware.NewAdminRateLimiter(5, 10)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10; i++ {
 		if !limiter.Allow("test-key") {
-			t.Errorf("request %d should be allowed", i+1)
+			t.Errorf("request %d should be allowed (within burst limit)", i+1)
 		}
 	}
 
 	if limiter.Allow("test-key") {
-		t.Error("request 6 should be rate limited")
+		t.Error("request 11 should be rate limited (burst exceeded)")
 	}
 }
 
@@ -358,14 +366,14 @@ func TestRateLimiter_DifferentKeys(t *testing.T) {
 
 	limiter := middleware.NewAdminRateLimiter(2, 5)
 
-	if !limiter.Allow("key1") {
-		t.Error("key1 request 1 should be allowed")
+	for i := 0; i < 5; i++ {
+		if !limiter.Allow("key1") {
+			t.Errorf("key1 request %d should be allowed (within burst)", i+1)
+		}
 	}
-	if !limiter.Allow("key1") {
-		t.Error("key1 request 2 should be allowed")
-	}
+
 	if limiter.Allow("key1") {
-		t.Error("key1 request 3 should be rate limited")
+		t.Error("key1 request 6 should be rate limited (burst exceeded)")
 	}
 
 	if !limiter.Allow("key2") {

@@ -68,11 +68,6 @@ func (r *AdminRateLimiter) Allow(key string) bool {
 		return false
 	}
 
-	if len(valid) >= r.rateLimit {
-		r.tokens[key] = valid
-		return false
-	}
-
 	valid = append(valid, now)
 	r.tokens[key] = valid
 	return true

@@ -284,7 +284,7 @@ func TestAuthzService_AssignRole(t *testing.T) {
 	assert.NotNil(t, ur)
 	assert.Equal(t, userID, ur.UserID)
 	assert.Equal(t, roleID, ur.RoleID)
-	assert.Equal(t, branchID, ur.BranchID)
+	assert.Equal(t, branchID, *ur.BranchID)
 	assert.True(t, ur.IsActive())
 }
 
