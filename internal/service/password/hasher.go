@@ -72,6 +72,17 @@ func (h *Hasher) Verify(password, hash string) bool {
 		return false
 	}
 
+	version := argon2.Version
+	if _, err := fmt.Sscanf(parts[1], "v=%d", &version); err != nil {
+		return false
+	}
+
+	var memory, iterations uint32
+	var parallelism uint8
+	if _, err := fmt.Sscanf(parts[2], "m=%d,t=%d,p=%d", &memory, &iterations, &parallelism); err != nil {
+		return false
+	}
+
 	saltB64 := parts[4]
 	hashB64 := parts[5]
 
@@ -88,10 +99,10 @@ func (h *Hasher) Verify(password, hash string) bool {
 	expected := argon2.IDKey(
 		[]byte(password),
 		salt,
-		h.config.Iterations,
-		h.config.Memory,
-		h.config.Parallelism,
-		h.config.KeyLength,
+		iterations,
+		memory,
+		parallelism,
+		uint32(len(hashBytes)),
 	)
 
 	return subtle.ConstantTimeCompare(hashBytes, expected) == 1
