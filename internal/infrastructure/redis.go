@@ -12,15 +12,18 @@ import (
 func NewRedis(ctx context.Context, cfg config.RedisConfig, logger zerolog.Logger) (*redis.Client, error) {
 	const op = "infrastructure.NewRedis"
 
-	client := redis.NewClient(&redis.Options{
-		Addr:         cfg.DSN,
-		PoolSize:     cfg.PoolSize,
-		MinIdleConns: cfg.MinIdleConns,
-		MaxRetries:   cfg.MaxRetries,
-		DialTimeout:  cfg.DialTimeout,
-		ReadTimeout:  cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-	})
+	opt, err := redis.ParseURL(cfg.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to parse redis URL: %w", op, err)
+	}
+	opt.PoolSize = cfg.PoolSize
+	opt.MinIdleConns = cfg.MinIdleConns
+	opt.MaxRetries = cfg.MaxRetries
+	opt.DialTimeout = cfg.DialTimeout
+	opt.ReadTimeout = cfg.ReadTimeout
+	opt.WriteTimeout = cfg.WriteTimeout
+
+	client := redis.NewClient(opt)
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("%s: ping: %w", op, err)
