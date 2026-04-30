@@ -73,13 +73,13 @@ func (h *Hasher) Verify(password, hash string) bool {
 	}
 
 	version := argon2.Version
-	if _, err := fmt.Sscanf(parts[1], "v=%d", &version); err != nil {
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
 		return false
 	}
 
 	var memory, iterations uint32
 	var parallelism uint8
-	if _, err := fmt.Sscanf(parts[2], "m=%d,t=%d,p=%d", &memory, &iterations, &parallelism); err != nil {
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &iterations, &parallelism); err != nil {
 		return false
 	}
 

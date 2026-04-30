@@ -44,6 +44,12 @@ func (rl *RateLimiter) Limit(identifier string, config RateLimitConfig) gin.Hand
 	return func(c *gin.Context) {
 		const op = "middleware.RateLimiter.Limit"
 
+		// Skip if redis not available
+		if rl.redis == nil {
+			c.Next()
+			return
+		}
+
 		ctx := c.Request.Context()
 		key := fmt.Sprintf("ratelimit:%s", identifier)
 

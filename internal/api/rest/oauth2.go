@@ -17,8 +17,6 @@ func (s *Server) RegisterOAuth2Routes(r *gin.Engine) {
 		oauth.GET("/userinfo", s.handleUserInfo)
 		oauth.POST("/register", s.handleDCR)
 	}
-
-	r.GET("/.well-known/openid-configuration", s.handleOIDCDiscovery)
 }
 
 func (s *Server) handleAuthorize(c *gin.Context) {

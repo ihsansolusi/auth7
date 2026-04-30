@@ -14,13 +14,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"go.opentelemetry.io/otel"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/ihsansolusi/auth7/internal/api/rest"
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
 	"github.com/ihsansolusi/auth7/internal/service"
+	"github.com/ihsansolusi/auth7/internal/service/jwt"
+	"github.com/ihsansolusi/auth7/internal/service/password"
+	"github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 	"github.com/ihsansolusi/auth7/pkg/config"
 	"github.com/ihsansolusi/lib7-service-go/logging"
@@ -28,6 +27,9 @@ import (
 	"github.com/ihsansolusi/lib7-service-go/shutdown"
 	"github.com/ihsansolusi/lib7-service-go/token"
 	"github.com/ihsansolusi/lib7-service-go/tracing"
+	"go.opentelemetry.io/otel"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func startCmd() *cobra.Command {
@@ -110,6 +112,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	store := postgres.New(primaryPool, replicaPool)
+	hasher := password.NewHasher(password.DefaultConfig())
+
+	redisClient, err := infrastructure.NewRedis(ctx, cfg.Redis, logger)
+	if err != nil {
+		return fmt.Errorf("init redis: %w", err)
+	}
+
+	jwtSvc := jwt.NewService(cfg.Service.Name, []string{cfg.Service.Name})
+	sessionStore := session.NewStore(redisClient, 8*time.Hour)
+	refreshTokenStore := session.NewRefreshTokenStore(redisClient)
+	blacklistStore := session.NewBlacklistStore(redisClient)
+	sessionSvc := session.NewService(sessionStore, refreshTokenStore, blacklistStore, jwtSvc, 8*time.Hour)
 
 	svc := service.New(store, tracer, logger)
 
@@ -142,12 +156,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 		)))
 	}
 
+	authHandler := rest.NewAuthHandler(store, hasher, sessionSvc, tokenMaker)
+	authHandler.RegisterRoutes(r)
 	server.RegisterRoutes(r, deps)
 
 	sm := shutdown.New(10*time.Second, logger)
 	sm.Register("tracer", func(ctx context.Context) error {
 		shutdownTracer()
 		return nil
+	})
+	sm.Register("redis", func(ctx context.Context) error {
+		return redisClient.Close()
 	})
 	sm.Register("db-replica", func(ctx context.Context) error {
 		if replicaPool != nil {

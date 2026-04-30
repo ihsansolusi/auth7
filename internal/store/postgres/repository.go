@@ -8,6 +8,7 @@ import (
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/ihsansolusi/auth7/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Store struct {
@@ -113,15 +114,23 @@ func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, use
 		FROM users WHERE org_id = $1 AND username = $2 AND deleted_at IS NULL
 	`
 	var user domain.User
+	var mfaMethod pgtype.Text
+	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, orgID, username).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
-		&user.EmailVerified, &user.MFAEnabled, &user.MFAMethod, &user.MFAResetRequired,
+		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
-		&user.LastLoginAt, &user.LastLoginIP, &user.PasswordChangedAt,
+		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
 		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt, &user.CreatedBy, &user.UpdatedBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if mfaMethod.Valid {
+		user.MFAMethod = domain.MFAMethod(mfaMethod.String)
+	}
+	if lastLoginIP.Valid {
+		user.LastLoginIP = lastLoginIP.String
 	}
 	return &user, nil
 }
@@ -137,15 +146,23 @@ func (r *UserRepository) GetByEmail(ctx context.Context, orgID uuid.UUID, email 
 		FROM users WHERE org_id = $1 AND email = $2 AND deleted_at IS NULL
 	`
 	var user domain.User
+	var mfaMethod pgtype.Text
+	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, orgID, email).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
-		&user.EmailVerified, &user.MFAEnabled, &user.MFAMethod, &user.MFAResetRequired,
+		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
-		&user.LastLoginAt, &user.LastLoginIP, &user.PasswordChangedAt,
+		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
 		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt, &user.CreatedBy, &user.UpdatedBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if mfaMethod.Valid {
+		user.MFAMethod = domain.MFAMethod(mfaMethod.String)
+	}
+	if lastLoginIP.Valid {
+		user.LastLoginIP = lastLoginIP.String
 	}
 	return &user, nil
 }
