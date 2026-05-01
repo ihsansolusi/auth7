@@ -100,6 +100,18 @@ func (s *ClientService) Delete(ctx context.Context, clientID, orgID uuid.UUID) e
 
 // CreateWithSecretHash creates a client with a pre-computed secret hash (used by DCR).
 func (s *ClientService) CreateWithSecretHash(ctx context.Context, orgID uuid.UUID, params CreateClientParams, secretHash string) (*domain.Client, error) {
+	allowedOrigins := params.AllowedOrigins
+	if allowedOrigins == nil {
+		allowedOrigins = []string{}
+	}
+	allowedScopes := params.AllowedScopes
+	if allowedScopes == nil {
+		allowedScopes = []string{}
+	}
+	allowedRedirectURIs := params.AllowedRedirectURIs
+	if allowedRedirectURIs == nil {
+		allowedRedirectURIs = []string{}
+	}
 	client := &domain.Client{
 		ID:                      uuid.New(),
 		OrgID:                   orgID,
@@ -107,9 +119,9 @@ func (s *ClientService) CreateWithSecretHash(ctx context.Context, orgID uuid.UUI
 		Description:             params.Description,
 		ClientType:              params.ClientType,
 		TokenEndpointAuthMethod: params.TokenEndpointAuthMethod,
-		AllowedScopes:           params.AllowedScopes,
-		AllowedRedirectURIs:     params.AllowedRedirectURIs,
-		AllowedOrigins:          params.AllowedOrigins,
+		AllowedScopes:           allowedScopes,
+		AllowedRedirectURIs:     allowedRedirectURIs,
+		AllowedOrigins:          allowedOrigins,
 		TokenExpiration:         params.TokenExpiration,
 		RefreshTokenExpiration:  params.RefreshTokenExpiration,
 		AllowMultipleTokens:     params.AllowMultipleTokens,
