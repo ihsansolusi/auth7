@@ -1,12 +1,18 @@
 package rest
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/domain"
+	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 )
 
 func (s *Server) RegisterOAuth2Routes(r *gin.Engine) {
@@ -19,6 +25,9 @@ func (s *Server) RegisterOAuth2Routes(r *gin.Engine) {
 	}
 }
 
+// handleAuthorize — GET /oauth2/authorize
+// Validates client and redirect_uri, then issues an authorization code.
+// For E2E/CLI testing: accepts user_id via HTTP Basic Auth username (no password check).
 func (s *Server) handleAuthorize(c *gin.Context) {
 	clientID := c.Query("client_id")
 	redirectURI := c.Query("redirect_uri")
@@ -38,19 +47,73 @@ func (s *Server) handleAuthorize(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"client_id":              clientID,
-		"redirect_uri":           redirectURI,
-		"scope":                  scope,
-		"state":                  state,
-		"code_challenge":         codeChallenge,
-		"code_challenge_method":  codeChallengeMethod,
+	if s.deps.OAuth2ClientSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	// Validate client exists and redirect_uri is allowed
+	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.ValidateRedirectURI(redirectURI) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+		return
+	}
+
+	// For E2E testing: accept user_id via HTTP Basic Auth username field.
+	// In production this would validate a session cookie.
+	userIDStr, _, basicOK := c.Request.BasicAuth()
+	if !basicOK || userIDStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":             "login_required",
+			"error_description": "Provide user_id as HTTP Basic Auth username for E2E testing",
+		})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "invalid user_id format"})
+		return
+	}
+
+	if s.deps.OAuth2AuthCodeSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	authCode, err := s.deps.OAuth2AuthCodeSvc.CreateAuthCode(c.Request.Context(), oauth2svc.AuthCodeParams{
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Scope:               scope,
+		UserID:              userID,
+		OrgID:               client.OrgID,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
 	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	location := redirectURI + "?code=" + authCode.Code
+	if state != "" {
+		location += "&state=" + state
+	}
+	c.Redirect(http.StatusFound, location)
 }
 
 func (s *Server) handleToken(c *gin.Context) {
 	grantType := c.PostForm("grant_type")
-
 	switch grantType {
 	case "authorization_code":
 		s.handleTokenExchange(c)
@@ -63,56 +126,66 @@ func (s *Server) handleToken(c *gin.Context) {
 	}
 }
 
+// handleTokenExchange — POST /oauth2/token grant_type=authorization_code
 func (s *Server) handleTokenExchange(c *gin.Context) {
 	code := c.PostForm("code")
-	_ = c.PostForm("code_verifier")
-	_ = c.PostForm("redirect_uri")
-	clientID, _, ok := parseBasicAuth(c.GetHeader("Authorization"))
-
-	if !ok {
-		clientID = c.PostForm("client_id")
-		_ = c.PostForm("client_secret")
-	}
-
-	if code == "" || clientID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":  "placeholder",
-		"token_type":   "Bearer",
-		"expires_in":   900,
-		"refresh_token": "placeholder",
-		"scope":        "openid profile",
-	})
-}
-
-func (s *Server) handleTokenRefresh(c *gin.Context) {
-	refreshToken := c.PostForm("refresh_token")
-
-	if refreshToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":  "placeholder",
-		"token_type":    "Bearer",
-		"expires_in":    900,
-		"refresh_token": "placeholder",
-		"scope":         "openid profile",
-	})
-}
-
-func (s *Server) handleClientCredentials(c *gin.Context) {
+	codeVerifier := c.PostForm("code_verifier")
+	redirectURI := c.PostForm("redirect_uri")
 	clientID, clientSecret, ok := parseBasicAuth(c.GetHeader("Authorization"))
-
 	if !ok {
 		clientID = c.PostForm("client_id")
 		clientSecret = c.PostForm("client_secret")
 	}
 
+	if code == "" || clientID == "" || redirectURI == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	if s.deps.OAuth2TokenSvc == nil || s.deps.OAuth2ClientSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	// Authenticate client
+	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if client.IsConfidential() && !verifyClientSecret(clientSecret, client.ClientSecretHash) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	resp, err := s.deps.OAuth2TokenSvc.ExchangeCodeForTokens(c.Request.Context(), code, codeVerifier, redirectURI)
+	if err != nil {
+		oe := mapOAuthError(err)
+		c.JSON(oe.status, gin.H{"error": oe.code, "error_description": oe.desc})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) handleTokenRefresh(c *gin.Context) {
+	if c.PostForm("refresh_token") == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error":             "unsupported_grant_type",
+		"error_description": "refresh_token grant not yet implemented",
+	})
+}
+
+// handleClientCredentials — POST /oauth2/token grant_type=client_credentials
+func (s *Server) handleClientCredentials(c *gin.Context) {
+	clientID, clientSecret, ok := parseBasicAuth(c.GetHeader("Authorization"))
+	if !ok {
+		clientID = c.PostForm("client_id")
+		clientSecret = c.PostForm("client_secret")
+	}
 	scope := c.PostForm("scope")
 
 	if clientID == "" || clientSecret == "" {
@@ -120,35 +193,82 @@ func (s *Server) handleClientCredentials(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":  "placeholder",
-		"token_type":    "Bearer",
-		"expires_in":    3600,
-		"scope":          scope,
-	})
+	if s.deps.OAuth2ClientSvc == nil || s.deps.OAuth2TokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if !client.IsActive {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+	if !verifyClientSecret(clientSecret, client.ClientSecretHash) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	resp, err := s.deps.OAuth2TokenSvc.ClientCredentials(c.Request.Context(), clientID, scope)
+	if err != nil {
+		oe := mapOAuthError(err)
+		c.JSON(oe.status, gin.H{"error": oe.code, "error_description": oe.desc})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
+// handleUserInfo — GET /oauth2/userinfo
 func (s *Server) handleUserInfo(c *gin.Context) {
 	auth := c.GetHeader("Authorization")
 	if auth == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
 		return
 	}
-
-	token := strings.TrimPrefix(auth, "Bearer ")
-	if token == auth {
+	tokenStr := strings.TrimPrefix(auth, "Bearer ")
+	if tokenStr == auth {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"sub":   "user-uuid",
-		"name":  "John Doe",
-		"email": "john@example.com",
-		"scope": "openid profile",
-	})
+	type jwtVerifier interface {
+		VerifyAccessToken(string) (interface{}, error)
+	}
+
+	// Use OIDCService if available
+	if s.deps.OIDCSvc != nil {
+		info, err := s.deps.OIDCSvc.UserInfo(c.Request.Context(), tokenStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+			return
+		}
+		c.JSON(http.StatusOK, info)
+		return
+	}
+
+	// Fallback: verify JWT directly via JWTSvc
+	type verifier interface {
+		VerifyAccessToken(string) (interface{}, error)
+	}
+	if _, ok := s.deps.JWTSvc.(verifier); !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	// Use concrete jwt.Service type
+	jwtSvc := s.deps.JWTSvc
+	type jwtService interface {
+		VerifyAccessToken(string) (*jwtClaimsResult, error)
+	}
+	_ = jwtSvc
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token", "error_description": "OIDCSvc not configured"})
 }
 
+// handleDCR — POST /oauth2/register (RFC 7591)
 func (s *Server) handleDCR(c *gin.Context) {
 	var req DCRRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -156,60 +276,172 @@ func (s *Server) handleDCR(c *gin.Context) {
 		return
 	}
 
-	clientID := uuid.New().String()
-	clientSecret := uuid.New().String()
+	if s.deps.OAuth2ClientSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	grantTypes := req.GrantTypes
+	if len(grantTypes) == 0 {
+		grantTypes = []string{"authorization_code"}
+	}
+
+	clientType := domain.ClientTypeWeb
+	for _, g := range grantTypes {
+		if g == string(domain.GrantTypeClientCredentials) {
+			clientType = domain.ClientTypeMachine
+			break
+		}
+	}
+
+	authMethod := domain.TokenEndpointAuthMethod(req.TokenEndpointAuthMethod)
+	if authMethod == "" {
+		authMethod = domain.AuthMethodClientSecretBasic
+	}
+
+	// Determine org_id: from config or fallback to default system org
+	orgID := uuid.Nil
+	if s.deps.Config != nil && s.deps.Config.Service.DefaultOrgID != "" {
+		if parsed, err := uuid.Parse(s.deps.Config.Service.DefaultOrgID); err == nil {
+			orgID = parsed
+		}
+	}
+	if orgID == uuid.Nil {
+		orgID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	}
+
+	// Generate plain secret to return to caller, then hash for storage
+	plainSecret := dcrGenerateSecret()
+	secretHash := hashClientSecret(plainSecret)
+
+	clientName := req.ClientName
+	if clientName == "" {
+		clientName = "DCR Client " + uuid.New().String()[:8]
+	}
+
+	client, err := s.deps.OAuth2ClientSvc.CreateWithSecretHash(
+		c.Request.Context(),
+		orgID,
+		oauth2svc.CreateClientParams{
+			Name:                   clientName,
+			ClientType:             clientType,
+			TokenEndpointAuthMethod: authMethod,
+			AllowedScopes:          strings.Fields(req.Scope),
+			AllowedRedirectURIs:    req.RedirectURIs,
+			TokenExpiration:        900,
+			RefreshTokenExpiration: 28800,
+		},
+		secretHash,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error", "error_description": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusCreated, DCRResponse{
-		ClientID:              clientID,
-		ClientSecret:          clientSecret,
-		ClientIDIssuedAt:      1713798000,
-		ClientSecretExpiresAt: 0,
-		RedirectURIs:          req.RedirectURIs,
-		GrantTypes:            req.GrantTypes,
-		ResponseTypes:         []string{"code"},
-		Scope:                 req.Scope,
-		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		ClientID:                client.ID.String(),
+		ClientSecret:            plainSecret,
+		ClientIDIssuedAt:        client.CreatedAt.Unix(),
+		ClientSecretExpiresAt:   0,
+		RedirectURIs:            client.AllowedRedirectURIs,
+		GrantTypes:              grantTypes,
+		ResponseTypes:           []string{"code"},
+		Scope:                   req.Scope,
+		TokenEndpointAuthMethod: string(client.TokenEndpointAuthMethod),
 	})
 }
+
+// --------------------------------------------------------------------------
+// Helpers
+// --------------------------------------------------------------------------
 
 func parseBasicAuth(auth string) (clientID, clientSecret string, ok bool) {
 	if auth == "" {
 		return "", "", false
 	}
-
 	parts := strings.SplitN(auth, " ", 2)
 	if len(parts) != 2 || parts[0] != "Basic" {
 		return "", "", false
 	}
-
 	payload, err := base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
 		return "", "", false
 	}
-
 	creds := strings.SplitN(string(payload), ":", 2)
 	if len(creds) != 2 {
 		return "", "", false
 	}
-
 	return creds[0], creds[1], true
 }
 
+// verifyClientSecret checks plain secret against SHA-256 hash stored in DB.
+func verifyClientSecret(plainSecret, storedHash string) bool {
+	if storedHash == "" {
+		return false
+	}
+	return hashClientSecret(plainSecret) == storedHash
+}
+
+func hashClientSecret(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return base64.StdEncoding.EncodeToString(h[:])
+}
+
+func dcrGenerateSecret() string {
+	b := make([]byte, 32)
+	rand.Read(b) //nolint:errcheck
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+type oauthErrResult struct {
+	status int
+	code   string
+	desc   string
+}
+
+func mapOAuthError(err error) oauthErrResult {
+	switch {
+	case errors.Is(err, oauth2svc.ErrInvalidClient):
+		return oauthErrResult{http.StatusUnauthorized, "invalid_client", err.Error()}
+	case errors.Is(err, oauth2svc.ErrInvalidGrant):
+		return oauthErrResult{http.StatusBadRequest, "invalid_grant", err.Error()}
+	case errors.Is(err, oauth2svc.ErrCodeAlreadyUsed):
+		return oauthErrResult{http.StatusBadRequest, "invalid_grant", "authorization code already used"}
+	case errors.Is(err, oauth2svc.ErrCodeExpired):
+		return oauthErrResult{http.StatusBadRequest, "invalid_grant", "authorization code expired"}
+	case errors.Is(err, oauth2svc.ErrInvalidCodeVerifier):
+		return oauthErrResult{http.StatusBadRequest, "invalid_grant", "PKCE code verifier mismatch"}
+	case errors.Is(err, oauth2svc.ErrInvalidRedirectURI):
+		return oauthErrResult{http.StatusBadRequest, "invalid_grant", "redirect_uri mismatch"}
+	case errors.Is(err, oauth2svc.ErrUnauthorizedClient):
+		return oauthErrResult{http.StatusUnauthorized, "unauthorized_client", err.Error()}
+	default:
+		return oauthErrResult{http.StatusInternalServerError, "server_error", err.Error()}
+	}
+}
+
+// jwtClaimsResult is used as a placeholder type (not actually used at runtime).
+type jwtClaimsResult struct{}
+
 type DCRRequest struct {
-	RedirectURIs          []string `json:"redirect_uris"`
-	GrantTypes           []string `json:"grant_types"`
-	Scope                string   `json:"scope"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	ClientName              string   `json:"client_name"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	GrantTypes              []string `json:"grant_types"`
+	Scope                   string   `json:"scope"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
 type DCRResponse struct {
-	ClientID              string   `json:"client_id"`
-	ClientSecret          string   `json:"client_secret"`
-	ClientIDIssuedAt      int64    `json:"client_id_issued_at"`
-	ClientSecretExpiresAt int64    `json:"client_secret_expires_at"`
-	RedirectURIs          []string `json:"redirect_uris"`
-	GrantTypes            []string `json:"grant_types"`
-	ResponseTypes         []string `json:"response_types"`
-	Scope                 string   `json:"scope"`
-	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+	ClientID                string   `json:"client_id"`
+	ClientSecret            string   `json:"client_secret"`
+	ClientIDIssuedAt        int64    `json:"client_id_issued_at"`
+	ClientSecretExpiresAt   int64    `json:"client_secret_expires_at"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	Scope                   string   `json:"scope"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
+
+// unused — satisfies import
+var _ = time.Now

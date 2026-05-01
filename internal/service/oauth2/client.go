@@ -98,6 +98,35 @@ func (s *ClientService) Delete(ctx context.Context, clientID, orgID uuid.UUID) e
 	return nil
 }
 
+// CreateWithSecretHash creates a client with a pre-computed secret hash (used by DCR).
+func (s *ClientService) CreateWithSecretHash(ctx context.Context, orgID uuid.UUID, params CreateClientParams, secretHash string) (*domain.Client, error) {
+	client := &domain.Client{
+		ID:                      uuid.New(),
+		OrgID:                   orgID,
+		Name:                    params.Name,
+		Description:             params.Description,
+		ClientType:              params.ClientType,
+		TokenEndpointAuthMethod: params.TokenEndpointAuthMethod,
+		AllowedScopes:           params.AllowedScopes,
+		AllowedRedirectURIs:     params.AllowedRedirectURIs,
+		AllowedOrigins:          params.AllowedOrigins,
+		TokenExpiration:         params.TokenExpiration,
+		RefreshTokenExpiration:  params.RefreshTokenExpiration,
+		AllowMultipleTokens:     params.AllowMultipleTokens,
+		SkipConsentScreen:       params.SkipConsentScreen,
+		IsActive:                true,
+		ClientSecretHash:        secretHash,
+		CreatedAt:               time.Now(),
+		UpdatedAt:               time.Now(),
+	}
+
+	if err := s.store.CreateClient(ctx, client); err != nil {
+		return nil, fmt.Errorf("%s: %w", opClientCreate, err)
+	}
+
+	return client, nil
+}
+
 type CreateClientParams struct {
 	Name                    string
 	Description             string

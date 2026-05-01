@@ -18,6 +18,7 @@ import (
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
 	"github.com/ihsansolusi/auth7/internal/service"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
+	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 	"github.com/ihsansolusi/auth7/internal/service/password"
 	"github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
@@ -127,18 +128,29 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	svc := service.New(store, tracer, logger)
 
+	// Wire OAuth2 services
+	oauth2ClientSvc := oauth2svc.NewClientService(store.OAuth2ClientRepository)
+	oauth2AuthCodeSvc := oauth2svc.NewAuthorizationCodeService(store.OAuth2AuthCodeRepository)
+	oauth2TokenSvc := oauth2svc.NewTokenService(oauth2ClientSvc, oauth2AuthCodeSvc, sessionSvc, jwtSvc)
+	oidcSvc := oauth2svc.NewOIDCService(jwtSvc, oauth2ClientSvc, nil)
+
 	cfgForServer := *cfg
 	cfgForServer.API.Metrics.Enabled = false
 
 	deps := rest.ServerDeps{
-		Service:     svc,
-		DB:          primaryPool,
-		Logger:      logger,
-		Tracer:      tracer,
-		Metrics:     metricsRegistry,
-		AuditLogger: auditLogger,
-		TokenMaker:  tokenMaker,
-		Config:      &cfgForServer,
+		Service:           svc,
+		DB:                primaryPool,
+		Logger:            logger,
+		Tracer:            tracer,
+		Metrics:           metricsRegistry,
+		AuditLogger:       auditLogger,
+		TokenMaker:        tokenMaker,
+		Config:            &cfgForServer,
+		JWTSvc:            jwtSvc,
+		OAuth2TokenSvc:    oauth2TokenSvc,
+		OAuth2ClientSvc:   oauth2ClientSvc,
+		OAuth2AuthCodeSvc: oauth2AuthCodeSvc,
+		OIDCSvc:           oidcSvc,
 	}
 	server := rest.NewServer(deps)
 

@@ -4,12 +4,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog"
 	"github.com/ihsansolusi/auth7/internal/api/middleware"
+	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 	"github.com/ihsansolusi/auth7/pkg/config"
-	"github.com/ihsansolusi/lib7-service-go/metrics"
 	"github.com/ihsansolusi/lib7-service-go/logging"
+	"github.com/ihsansolusi/lib7-service-go/metrics"
 	"github.com/ihsansolusi/lib7-service-go/token"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -25,6 +26,11 @@ type ServerDeps struct {
 	SessionSvc   any
 	Config       *config.Config
 	RedisClient  any
+	// OAuth2 services
+	OAuth2TokenSvc    *oauth2svc.TokenService
+	OAuth2ClientSvc   *oauth2svc.ClientService
+	OAuth2AuthCodeSvc *oauth2svc.AuthorizationCodeService
+	OIDCSvc           *oauth2svc.OIDCService
 }
 
 type Server struct {
@@ -95,13 +101,18 @@ func (s *Server) handleJWKS(c *gin.Context) {
 }
 
 func (s *Server) handleOIDCDiscovery(c *gin.Context) {
+	baseURL := "https://auth7.bank.co.id"
+	if s.deps.Config != nil && s.deps.Config.Service.BaseURL != "" {
+		baseURL = s.deps.Config.Service.BaseURL
+	}
+
 	discovery := OIDCDiscovery{
-		Issuer:                            "https://auth7.bank.co.id",
-		AuthorizationEndpoint:             "https://auth7.bank.co.id/oauth2/authorize",
-		TokenEndpoint:                     "https://auth7.bank.co.id/oauth2/token",
-		UserInfoEndpoint:                  "https://auth7.bank.co.id/oauth2/userinfo",
-		JwksURI:                           "https://auth7.bank.co.id/.well-known/jwks.json",
-		RegistrationEndpoint:              "https://auth7.bank.co.id/oauth2/register",
+		Issuer:                            baseURL,
+		AuthorizationEndpoint:             baseURL + "/oauth2/authorize",
+		TokenEndpoint:                     baseURL + "/oauth2/token",
+		UserInfoEndpoint:                  baseURL + "/oauth2/userinfo",
+		JwksURI:                           baseURL + "/.well-known/jwks.json",
+		RegistrationEndpoint:              baseURL + "/oauth2/register",
 		ScopesSupported:                   []string{"openid", "profile", "email", "roles"},
 		ResponseTypesSupported:            []string{"code"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token", "client_credentials"},

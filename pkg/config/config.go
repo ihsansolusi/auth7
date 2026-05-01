@@ -7,9 +7,11 @@ import (
 )
 
 type ServiceConfig struct {
-	Name    string `mapstructure:"name"    validate:"required"`
-	Profile string `mapstructure:"profile" validate:"required,oneof=internal external"`
-	Version string `mapstructure:"version"`
+	Name         string `mapstructure:"name"           validate:"required"`
+	Profile      string `mapstructure:"profile"        validate:"required,oneof=internal external"`
+	Version      string `mapstructure:"version"`
+	BaseURL      string `mapstructure:"base_url"`      // e.g. http://localhost:8090 (used for OIDC discovery)
+	DefaultOrgID string `mapstructure:"default_org_id"` // UUID of default org for DCR without auth context
 }
 
 type ServerConfig struct {

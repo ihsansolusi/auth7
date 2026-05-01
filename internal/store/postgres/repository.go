@@ -23,9 +23,11 @@ type Store struct {
 	EmailOTPCodeRepository     *EmailOTPCodeRepository
 	RoleRepository            *RoleRepository
 	PermissionRepository      *PermissionRepository
-	RolePermissionRepository *RolePermissionRepository
-	UserRoleRepository        *UserRoleRepository
-	AuditLogRepository        *AuditLogRepository
+	RolePermissionRepository   *RolePermissionRepository
+	UserRoleRepository         *UserRoleRepository
+	AuditLogRepository         *AuditLogRepository
+	OAuth2ClientRepository     *OAuth2ClientRepository
+	OAuth2AuthCodeRepository   *OAuth2AuthCodeRepository
 }
 
 func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
@@ -41,6 +43,8 @@ func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
 	s.RolePermissionRepository = &RolePermissionRepository{pool: pool}
 	s.UserRoleRepository = &UserRoleRepository{pool: pool}
 	s.AuditLogRepository = &AuditLogRepository{pool: pool}
+	s.OAuth2ClientRepository = &OAuth2ClientRepository{pool: pool}
+	s.OAuth2AuthCodeRepository = &OAuth2AuthCodeRepository{pool: pool}
 	return s
 }
 
