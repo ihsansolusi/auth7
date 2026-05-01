@@ -61,8 +61,15 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | [Plan 08](./docs/plans/PLAN-08.md) | ✅ DONE | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
 | [Plan 09](./docs/plans/PLAN-09.md) | ✅ DONE | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
 | [Plan 10](./docs/plans/PLAN-10.md) | ✅ DONE | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
-| [Plan 11](./docs/plans/PLAN-11.md) | 📋 Planned | [#92](https://github.com/ihsansolusi/auth7/issues/92) | #93-104 (12) |
-| **[Plan 12](./docs/plans/PLAN-12.md)** | 📋 **NEW** | [#105](https://github.com/ihsansolusi/auth7/issues/105) | **#106-112 (7)** |
+| [Plan 11](./docs/plans/PLAN-11.md) | ⏸️ ON HOLD | [#92](https://github.com/ihsansolusi/auth7/issues/92) | #93-104 (12) |
+| [Plan 12](./docs/plans/PLAN-12.md) | ⏸️ ON HOLD | [#105](https://github.com/ihsansolusi/auth7/issues/105) | #106-112 (7) |
+
+### E2E Test Infrastructure (Ready)
+- `docker-compose.dev.yml` — PostgreSQL, Redis, NATS, auth7, workflow7, policy7, notif7
+- `configs/nats-dev.conf` — NATS with JetStream enabled
+- `scripts/seed-data.sql` — Test users, roles, branches, OAuth2 clients
+
+> **Note**: Plans 11-12 on hold. Infrastructure ready for core7 tester E2E session.
 
 ## Struktur Folder (Planned)
 
