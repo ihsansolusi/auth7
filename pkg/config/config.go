@@ -118,11 +118,16 @@ type LoggingConfig struct {
 }
 
 type NATSConfig struct {
-	Enabled   bool     `mapstructure:"enabled"`
-	URL       string   `mapstructure:"url"`
-	Username  string   `mapstructure:"username"`
-	Password  string   `mapstructure:"password"`
-	CredsFile string   `mapstructure:"creds_file"`
+	Enabled        bool          `mapstructure:"enabled"`
+	URL            string        `mapstructure:"url"`
+	Name           string        `mapstructure:"name"`
+	Username       string        `mapstructure:"username"`
+	Password       string        `mapstructure:"password"`
+	CredsFile      string        `mapstructure:"creds_file"`
+	ReconnectWait  time.Duration `mapstructure:"reconnect_wait"`
+	MaxReconnects  int           `mapstructure:"max_reconnects"`
+	PublishTimeout time.Duration `mapstructure:"publish_timeout"`
+	PublishRetry   int           `mapstructure:"publish_retry"`
 }
 
 type ExternalConfig struct {

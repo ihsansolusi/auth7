@@ -16,7 +16,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ihsansolusi/auth7/internal/api/rest"
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
+	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	"github.com/ihsansolusi/auth7/internal/service"
+	"github.com/ihsansolusi/auth7/internal/service/opacache"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 	"github.com/ihsansolusi/auth7/internal/service/password"
@@ -120,6 +122,50 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("init redis: %w", err)
 	}
 
+	opaCache := opacache.NewCache(5*time.Minute, logger)
+
+	var eventPub *nats.EventPublisher
+	var subscriber *nats.Subscriber
+	var natsClient *nats.Client
+
+	if cfg.NATS.Enabled {
+		natsClient, err = nats.NewClient(ctx, nats.Config{
+			URL:            cfg.NATS.URL,
+			Name:           cfg.NATS.Name,
+			Username:       cfg.NATS.Username,
+			Password:       cfg.NATS.Password,
+			CredsFile:      cfg.NATS.CredsFile,
+			ReconnectWait:  cfg.NATS.ReconnectWait,
+			MaxReconnects:  cfg.NATS.MaxReconnects,
+			PublishTimeout: cfg.NATS.PublishTimeout,
+			PublishRetry:   cfg.NATS.PublishRetry,
+		}, logger)
+		if err != nil {
+			logger.Warn().Err(err).Msg("NATS client failed to connect, event streaming disabled")
+			natsClient = nil
+		}
+
+		if natsClient != nil {
+			publisher := nats.NewPublisher(natsClient, logger)
+			eventPub = nats.NewEventPublisher(publisher, logger)
+
+			subscriber = nats.NewSubscriber(natsClient, logger)
+			policyHandler := nats.NewPolicyUpdateHandler(opaCache, logger)
+
+			if err := subscriber.Subscribe(nats.SubjectPolicyParamsUpdated, policyHandler.HandleParamUpdated); err != nil {
+				logger.Warn().Err(err).Msg("failed to subscribe to policy param updates")
+			}
+
+			if err := subscriber.Subscribe(nats.SubjectPolicyParamsDeleted, policyHandler.HandleParamDeleted); err != nil {
+				logger.Warn().Err(err).Msg("failed to subscribe to policy param deletes")
+			}
+
+			logger.Info().Str("url", cfg.NATS.URL).Msg("NATS event publisher and subscriber initialized")
+		}
+	} else {
+		logger.Info().Msg("NATS event streaming disabled")
+	}
+
 	jwtSvc := jwt.NewService(cfg.Service.Name, []string{cfg.Service.Name})
 	sessionStore := session.NewStore(redisClient, 8*time.Hour)
 	refreshTokenStore := session.NewRefreshTokenStore(redisClient)
@@ -151,6 +197,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		OAuth2ClientSvc:   oauth2ClientSvc,
 		OAuth2AuthCodeSvc: oauth2AuthCodeSvc,
 		OIDCSvc:           oidcSvc,
+		EventPub:          eventPub,
 	}
 	server := rest.NewServer(deps)
 
@@ -177,6 +224,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 		shutdownTracer()
 		return nil
 	})
+	if subscriber != nil {
+		sm.Register("nats-subscriber", func(ctx context.Context) error {
+			subscriber.Close()
+			return nil
+		})
+	}
+	if eventPub != nil {
+		sm.Register("nats-publisher", func(ctx context.Context) error {
+			eventPub.Close()
+			return nil
+		})
+	}
 	sm.Register("redis", func(ctx context.Context) error {
 		return redisClient.Close()
 	})

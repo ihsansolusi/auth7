@@ -95,8 +95,14 @@ logging:
 nats:
   enabled: ${NATS_ENABLED:-false}
   url: ${NATS_URL:-nats://localhost:4222}
+  name: auth7
   username: ""
   password: ""
+  creds_file: ""
+  reconnect_wait: 2s
+  max_reconnects: 10
+  publish_timeout: 5s
+  publish_retry: 3
 
 external:
   grpc:

@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ihsansolusi/auth7/internal/api/middleware"
+	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 	"github.com/ihsansolusi/auth7/pkg/config"
 	"github.com/ihsansolusi/lib7-service-go/logging"
@@ -26,6 +27,7 @@ type ServerDeps struct {
 	SessionSvc   any
 	Config       *config.Config
 	RedisClient  any
+	EventPub     *nats.EventPublisher
 	// OAuth2 services
 	OAuth2TokenSvc    *oauth2svc.TokenService
 	OAuth2ClientSvc   *oauth2svc.ClientService
