@@ -164,13 +164,13 @@ func (r *OAuth2AuthCodeRepository) Create(ctx context.Context, code *oauth2svc.A
 	query := `
 		INSERT INTO oauth2_authorization_codes (
 			code, client_id, redirect_uri, scope,
-			user_id, org_id,
+			user_id, username, email, org_id,
 			code_challenge, code_challenge_method,
 			expires_at, code_used, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	_, err := r.pool.Exec(ctx, query,
 		code.Code, code.ClientID, code.RedirectURI, code.Scope,
-		code.UserID, code.OrgID,
+		code.UserID, code.Username, code.Email, code.OrgID,
 		code.CodeChallenge, code.CodeChallengeMethod,
 		code.ExpiresAt, code.CodeUsed, time.Now(),
 	)
@@ -184,7 +184,7 @@ func (r *OAuth2AuthCodeRepository) GetByCode(ctx context.Context, code string) (
 	const op = opOAuth2AuthCodeGet
 	query := `
 		SELECT code, client_id, redirect_uri, scope,
-		       user_id, org_id,
+		       user_id, username, email, org_id,
 		       code_challenge, code_challenge_method,
 		       expires_at, code_used
 		FROM oauth2_authorization_codes
@@ -194,9 +194,10 @@ func (r *OAuth2AuthCodeRepository) GetByCode(ctx context.Context, code string) (
 
 	ac := &oauth2svc.AuthCode{}
 	var userIDStr, orgIDStr string
+	var username, email *string
 	err := row.Scan(
 		&ac.Code, &ac.ClientID, &ac.RedirectURI, &ac.Scope,
-		&userIDStr, &orgIDStr,
+		&userIDStr, &username, &email, &orgIDStr,
 		&ac.CodeChallenge, &ac.CodeChallengeMethod,
 		&ac.ExpiresAt, &ac.CodeUsed,
 	)
@@ -205,6 +206,12 @@ func (r *OAuth2AuthCodeRepository) GetByCode(ctx context.Context, code string) (
 	}
 	ac.UserID, _ = uuid.Parse(userIDStr)
 	ac.OrgID, _ = uuid.Parse(orgIDStr)
+	if username != nil {
+		ac.Username = *username
+	}
+	if email != nil {
+		ac.Email = *email
+	}
 	return ac, nil
 }
 

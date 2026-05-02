@@ -11,16 +11,18 @@ import (
 )
 
 type AuthCode struct {
-	Code        string
-	ClientID    string
-	RedirectURI string
-	Scope       string
-	UserID      uuid.UUID
-	OrgID       uuid.UUID
-	CodeChallenge string
+	Code               string
+	ClientID           string
+	RedirectURI        string
+	Scope              string
+	UserID             uuid.UUID
+	Username           string
+	Email              string
+	OrgID              uuid.UUID
+	CodeChallenge      string
 	CodeChallengeMethod string
-	ExpiresAt   time.Time
-	CodeUsed    bool
+	ExpiresAt          time.Time
+	CodeUsed           bool
 }
 
 type AuthCodeStore interface {
@@ -77,6 +79,8 @@ func (s *AuthorizationCodeService) CreateAuthCode(ctx context.Context, params Au
 		RedirectURI:        params.RedirectURI,
 		Scope:              params.Scope,
 		UserID:             params.UserID,
+		Username:           params.Username,
+		Email:              params.Email,
 		OrgID:              params.OrgID,
 		CodeChallenge:      params.CodeChallenge,
 		CodeChallengeMethod: params.CodeChallengeMethod,
@@ -116,12 +120,14 @@ func (s *AuthorizationCodeService) ExchangeAuthCode(ctx context.Context, code, c
 }
 
 type AuthCodeParams struct {
-	ClientID           string
-	RedirectURI        string
-	Scope              string
-	UserID             uuid.UUID
-	OrgID              uuid.UUID
-	CodeChallenge      string
+	ClientID            string
+	RedirectURI         string
+	Scope               string
+	UserID              uuid.UUID
+	Username            string
+	Email               string
+	OrgID               uuid.UUID
+	CodeChallenge       string
 	CodeChallengeMethod string
 }
 

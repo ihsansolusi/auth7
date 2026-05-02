@@ -55,6 +55,8 @@ func (s *TokenService) ExchangeCodeForTokens(ctx context.Context, code, codeVeri
 	token, access, err := s.jwtSvc.IssueAccessToken(sessionID, authCode.UserID, authCode.OrgID, jwt.Claims{
 		ClientID: client.ID.String(),
 		Scope:    authCode.Scope,
+		Username: authCode.Username,
+		Email:    authCode.Email,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", opTokenExchange, err)

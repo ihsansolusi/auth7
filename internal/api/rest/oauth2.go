@@ -212,6 +212,8 @@ func (s *Server) handleAuthorizeWithSession(c *gin.Context) {
 		RedirectURI:         req.RedirectURI,
 		Scope:               scope,
 		UserID:              userID,
+		Username:            claims.Username,
+		Email:               claims.Email,
 		OrgID:               client.OrgID,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
