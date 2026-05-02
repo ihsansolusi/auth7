@@ -193,6 +193,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		TokenMaker:        tokenMaker,
 		Config:            &cfgForServer,
 		JWTSvc:            jwtSvc,
+		SessionSvc:        sessionSvc,
+		RedisClient:       redisClient,
 		OAuth2TokenSvc:    oauth2TokenSvc,
 		OAuth2ClientSvc:   oauth2ClientSvc,
 		OAuth2AuthCodeSvc: oauth2AuthCodeSvc,

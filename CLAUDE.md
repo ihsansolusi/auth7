@@ -5,8 +5,8 @@ Panduan konteks untuk Claude AI saat bekerja di repo `ihsansolusi/auth7`.
 ## Identitas Proyek
 
 - **Nama**: Auth7 — Identity & Access Management Platform untuk Core7
-- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-09 complete, Plan 10 ready to start
-- **Planning Status**: ✅ **COMPLETE** — All specs reviewed, 12 plans, 111 GitHub issues
+- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-12 complete, Plan 11 moved to core7-devroot
+- **Planning Status**: ✅ **COMPLETE** — All specs reviewed, 12 plans, 99 GitHub issues (12 moved to core7-devroot)
 - **Implementation Start**: ✅ COMPLETE — Plans 01 & 02 finished (2026-04-27)
 - **Root Issue**: [#1 — Auth7 v1.0](https://github.com/ihsansolusi/auth7/issues/1)
 - **Total GitHub Issues**: 111 issues (1 root + 12 plan groups + 98 implementation issues)
@@ -61,7 +61,7 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | [Plan 08](./docs/plans/PLAN-08.md) | ✅ DONE | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
 | [Plan 09](./docs/plans/PLAN-09.md) | ✅ DONE | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
 | [Plan 10](./docs/plans/PLAN-10.md) | ✅ DONE | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
-| [Plan 11](./docs/plans/PLAN-11.md) | 📦 MOVED | Moved to core7-devroot | Multi-project scope |
+| [Plan 11](https://github.com/ihsansolusi/core7-devroot/blob/main/docs/plans/integration/PLAN-11-auth7-integration.md) | 📦 MOVED | [core7-devroot#185](https://github.com/ihsansolusi/core7-devroot/issues/185) | [core7-devroot#186-197](https://github.com/ihsansolusi/core7-devroot/issues/185) |
 | [Plan 12](./docs/plans/PLAN-12.md) | ✅ DONE | [#105](https://github.com/ihsansolusi/auth7/issues/105) | #106-112 (7) |
 
 ### E2E Test Infrastructure (Ready)
@@ -69,7 +69,7 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 - `configs/nats-dev.conf` — NATS with JetStream enabled
 - `scripts/seed-data.sql` — Test users, roles, branches, OAuth2 clients
 
-> **Note**: Plan 11 on hold. Plan 12 complete. Infrastructure ready for core7 tester E2E session.
+> **Note**: Plan 11 moved to core7-devroot (#185). Plan 12 complete. Infrastructure ready for core7 tester E2E session.
 
 ## Struktur Folder (Planned)
 
