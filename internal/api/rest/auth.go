@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
+	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
 	"github.com/ihsansolusi/auth7/internal/service/password"
 	"github.com/ihsansolusi/auth7/internal/service/session"
@@ -20,14 +21,16 @@ type AuthHandler struct {
 	hasher     *password.Hasher
 	sessionSvc *session.Service
 	tokenMaker token.Maker
+	eventPub   *nats.EventPublisher
 }
 
-func NewAuthHandler(store *postgres.Store, hasher *password.Hasher, sessionSvc *session.Service, tokenMaker token.Maker) *AuthHandler {
+func NewAuthHandler(store *postgres.Store, hasher *password.Hasher, sessionSvc *session.Service, tokenMaker token.Maker, eventPub *nats.EventPublisher) *AuthHandler {
 	return &AuthHandler{
 		store:      store,
 		hasher:     hasher,
 		sessionSvc: sessionSvc,
 		tokenMaker: tokenMaker,
+		eventPub:   eventPub,
 	}
 }
 
@@ -240,6 +243,16 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 			"mfa_enabled": user.MFAEnabled,
 		},
 	})
+
+	if h.eventPub != nil {
+		_ = h.eventPub.PublishSessionCreated(c.Request.Context(), nats.SessionCreatedEvent{
+			SessionID: result.SessionID,
+			OrgID:     orgID.String(),
+			UserID:    user.ID.String(),
+			IPAddress: ipAddress,
+			CreatedAt: time.Now(),
+		})
+	}
 }
 
 func (h *AuthHandler) HandleLogout(c *gin.Context) {
@@ -264,6 +277,24 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	if err := h.sessionSvc.RevokeSession(c.Request.Context(), claims.SessionID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout"})
 		return
+	}
+
+	if h.eventPub != nil {
+		_ = h.eventPub.PublishTokenRevoked(c.Request.Context(), nats.TokenRevokedEvent{
+			TokenID:   claims.SessionID,
+			OrgID:     claims.OrgID,
+			UserID:    claims.Subject,
+			RevokedBy: claims.Subject,
+			Reason:    "logout",
+			RevokedAt: time.Now(),
+		})
+		_ = h.eventPub.PublishSessionTerminated(c.Request.Context(), nats.SessionTerminatedEvent{
+			SessionID:    claims.SessionID,
+			OrgID:        claims.OrgID,
+			UserID:       claims.Subject,
+			Reason:       "logout",
+			TerminatedAt: time.Now(),
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "logged_out"})
