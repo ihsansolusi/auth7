@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
@@ -494,11 +495,18 @@ func parseBasicAuth(auth string) (clientID, clientSecret string, ok bool) {
 }
 
 // verifyClientSecret checks plain secret against SHA-256 hash stored in DB.
+// Supports both hex-encoded (seed-data.sql style) and base64-encoded hashes.
 func verifyClientSecret(plainSecret, storedHash string) bool {
 	if storedHash == "" {
 		return false
 	}
-	return hashClientSecret(plainSecret) == storedHash
+	h := sha256.Sum256([]byte(plainSecret))
+	// Try hex first (used in seed-data.sql)
+	if hex.EncodeToString(h[:]) == storedHash {
+		return true
+	}
+	// Fallback: base64 (used by DCR-generated clients)
+	return base64.StdEncoding.EncodeToString(h[:]) == storedHash
 }
 
 func hashClientSecret(secret string) string {
