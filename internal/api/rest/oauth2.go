@@ -13,12 +13,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
+	"github.com/ihsansolusi/auth7/internal/service/session"
 )
 
 func (s *Server) RegisterOAuth2Routes(r *gin.Engine) {
 	oauth := r.Group("/oauth2")
 	{
 		oauth.GET("/authorize", s.handleAuthorize)
+		oauth.POST("/authorize-with-session", s.handleAuthorizeWithSession)
 		oauth.POST("/token", s.handleToken)
 		oauth.GET("/userinfo", s.handleUserInfo)
 		oauth.POST("/register", s.handleDCR)
@@ -112,6 +114,121 @@ func (s *Server) handleAuthorize(c *gin.Context) {
 		location += "&state=" + state
 	}
 	c.Redirect(http.StatusFound, location)
+}
+
+// handleAuthorizeWithSession — POST /oauth2/authorize-with-session
+// Called by auth7-ui after successful login. Validates Bearer token and issues auth code.
+// Request body: { client_id, redirect_uri, response_type, scope, state, code_challenge, code_challenge_method }
+// Response: { redirect_url: "http://client/callback?code=...&state=..." }
+func (s *Server) handleAuthorizeWithSession(c *gin.Context) {
+	// Extract and validate Bearer token
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token", "error_description": "Bearer token required"})
+		return
+	}
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Validate token via SessionSvc
+	sessionSvc, ok := s.deps.SessionSvc.(*session.Service)
+	if !ok || sessionSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	claims, err := sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token", "error_description": "Token tidak valid atau sudah expired"})
+		return
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		ClientID            string `json:"client_id" binding:"required"`
+		RedirectURI         string `json:"redirect_uri" binding:"required"`
+		ResponseType        string `json:"response_type"`
+		Scope               string `json:"scope"`
+		State               string `json:"state"`
+		CodeChallenge       string `json:"code_challenge"`
+		CodeChallengeMethod string `json:"code_challenge_method"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": err.Error()})
+		return
+	}
+
+	if req.ResponseType != "" && req.ResponseType != "code" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_response_type"})
+		return
+	}
+
+	if s.deps.OAuth2ClientSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	// Validate client and redirect_uri
+	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), req.ClientID)
+	if err != nil {
+		s.deps.Logger.Error().Err(err).Str("client_id", req.ClientID).Msg("handleAuthorizeWithSession: GetByClientID failed")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	if !client.IsActive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client", "error_description": "client is inactive"})
+		return
+	}
+
+	if !client.ValidateRedirectURI(req.RedirectURI) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+		return
+	}
+
+	scope := req.Scope
+	if scope == "" {
+		scope = "openid"
+	}
+	codeChallenge := req.CodeChallenge
+	codeChallengeMethod := req.CodeChallengeMethod
+	if codeChallengeMethod == "" {
+		codeChallengeMethod = "S256"
+	}
+
+	if s.deps.OAuth2AuthCodeSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	authCode, err := s.deps.OAuth2AuthCodeSvc.CreateAuthCode(c.Request.Context(), oauth2svc.AuthCodeParams{
+		ClientID:            req.ClientID,
+		RedirectURI:         req.RedirectURI,
+		Scope:               scope,
+		UserID:              userID,
+		OrgID:               client.OrgID,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+	})
+	if err != nil {
+		s.deps.Logger.Error().Err(err).Msg("handleAuthorizeWithSession: CreateAuthCode failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	redirectURL := req.RedirectURI + "?code=" + authCode.Code
+	if req.State != "" {
+		redirectURL += "&state=" + req.State
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"redirect_url": redirectURL,
+	})
 }
 
 func (s *Server) handleToken(c *gin.Context) {
