@@ -55,11 +55,13 @@ func (s *Server) handleAuthorize(c *gin.Context) {
 	// Validate client exists and redirect_uri is allowed
 	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
 	if err != nil {
+		s.deps.Logger.Error().Err(err).Str("client_id", clientID).Msg("GetByClientID failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}
 
 	if !client.IsActive {
+		s.deps.Logger.Warn().Str("client_id", clientID).Msg("client is inactive")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_client"})
 		return
 	}

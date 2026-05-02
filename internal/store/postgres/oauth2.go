@@ -119,16 +119,23 @@ func (r *OAuth2ClientRepository) GetClient(ctx context.Context, clientID string)
 	c := &domain.Client{}
 	var clientIDStr string
 	var clientTypeStr, authMethodStr string
+	var description, clientSecretHash *string
 	err := row.Scan(
-		&c.ID, &clientIDStr, &c.OrgID, &c.Name, &c.Description,
+		&c.ID, &clientIDStr, &c.OrgID, &c.Name, &description,
 		&clientTypeStr, &authMethodStr,
 		&c.AllowedScopes, &c.AllowedRedirectURIs, &c.AllowedOrigins,
-		&c.ClientSecretHash, &c.TokenExpiration, &c.RefreshTokenExpiration,
+		&clientSecretHash, &c.TokenExpiration, &c.RefreshTokenExpiration,
 		&c.AllowMultipleTokens, &c.SkipConsentScreen, &c.IsActive,
 		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if description != nil {
+		c.Description = *description
+	}
+	if clientSecretHash != nil {
+		c.ClientSecretHash = *clientSecretHash
 	}
 	c.ClientType = domain.ClientType(clientTypeStr)
 	c.TokenEndpointAuthMethod = domain.TokenEndpointAuthMethod(authMethodStr)
