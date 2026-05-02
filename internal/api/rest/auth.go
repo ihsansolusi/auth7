@@ -220,7 +220,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 
 	claims := jwt.Claims{
-		Roles: []string{},
+		Username: user.Username,
+		Email:    user.Email,
+		Roles:    []string{},
 	}
 
 	result, err := h.sessionSvc.CreateSession(c.Request.Context(), user.ID, orgID, ipAddress, userAgent, claims)
