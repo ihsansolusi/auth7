@@ -28,6 +28,7 @@ type Store struct {
 	AuditLogRepository         *AuditLogRepository
 	OAuth2ClientRepository     *OAuth2ClientRepository
 	OAuth2AuthCodeRepository   *OAuth2AuthCodeRepository
+	UserBranchAssignmentRepository *UserBranchAssignmentRepository
 }
 
 func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
@@ -45,6 +46,7 @@ func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
 	s.AuditLogRepository = &AuditLogRepository{pool: pool}
 	s.OAuth2ClientRepository = &OAuth2ClientRepository{pool: pool}
 	s.OAuth2AuthCodeRepository = &OAuth2AuthCodeRepository{pool: pool}
+	s.UserBranchAssignmentRepository = &UserBranchAssignmentRepository{pool: pool}
 	return s
 }
 
@@ -58,6 +60,9 @@ func (s *Store) Permissions() store.PermissionStore  { return s.PermissionReposi
 func (s *Store) RolePermissions() store.RolePermissionStore { return s.RolePermissionRepository }
 func (s *Store) UserRoles() store.UserRoleStore       { return s.UserRoleRepository }
 func (s *Store) AuditLogs() store.AuditLogStore      { return s.AuditLogRepository }
+
+// Pool returns the primary pgxpool for ad-hoc queries
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 type UserRepository struct {
 	pool *pgxpool.Pool
@@ -94,15 +99,23 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 		FROM users WHERE id = $1 AND deleted_at IS NULL
 	`
 	var user domain.User
+	var mfaMethod pgtype.Text
+	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
-		&user.EmailVerified, &user.MFAEnabled, &user.MFAMethod, &user.MFAResetRequired,
+		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
-		&user.LastLoginAt, &user.LastLoginIP, &user.PasswordChangedAt,
+		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
 		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt, &user.CreatedBy, &user.UpdatedBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if mfaMethod.Valid {
+		user.MFAMethod = domain.MFAMethod(mfaMethod.String)
+	}
+	if lastLoginIP.Valid {
+		user.LastLoginIP = lastLoginIP.String
 	}
 	return &user, nil
 }
@@ -232,14 +245,22 @@ func (r *UserRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, limit, 
 	var users []*domain.User
 	for rows.Next() {
 		var user domain.User
+		var mfaMethod pgtype.Text
+		var lastLoginIP pgtype.Text
 		if err := rows.Scan(
 			&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
-			&user.EmailVerified, &user.MFAEnabled, &user.MFAMethod, &user.MFAResetRequired,
+			&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 			&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
-			&user.LastLoginAt, &user.LastLoginIP, &user.PasswordChangedAt,
+			&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
 			&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt, &user.CreatedBy, &user.UpdatedBy,
 		); err != nil {
 			return nil, 0, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		if mfaMethod.Valid {
+			user.MFAMethod = domain.MFAMethod(mfaMethod.String)
+		}
+		if lastLoginIP.Valid {
+			user.LastLoginIP = lastLoginIP.String
 		}
 		users = append(users, &user)
 	}
@@ -1139,4 +1160,90 @@ func (r *AuditLogRepository) List(ctx context.Context, filter domain.AuditLogFil
 	}
 
 	return logs, total, nil
+}
+
+type UserBranchAssignmentRepository struct {
+	pool *pgxpool.Pool
+}
+
+func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.UserBranchAssignment, error) {
+	const op = "postgres.UserBranchAssignmentRepository.GetByUserID"
+	q := `
+		SELECT id, user_id, branch_id, is_primary
+		FROM user_branch_assignments
+		WHERE user_id = $1
+		ORDER BY is_primary DESC, created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var assignments []*domain.UserBranchAssignment
+	for rows.Next() {
+		var a domain.UserBranchAssignment
+		if err := rows.Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		assignments = append(assignments, &a)
+	}
+	return assignments, nil
+}
+
+func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
+	const op = "postgres.UserBranchAssignmentRepository.GetPrimaryByUserID"
+	q := `
+		SELECT id, user_id, branch_id, is_primary
+		FROM user_branch_assignments
+		WHERE user_id = $1 AND is_primary = true
+		LIMIT 1
+	`
+	var a domain.UserBranchAssignment
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &a, nil
+}
+
+func (r *UserBranchAssignmentRepository) GetByUserAndBranch(ctx context.Context, userID, branchID uuid.UUID) (*domain.UserBranchAssignment, error) {
+	const op = "postgres.UserBranchAssignmentRepository.GetByUserAndBranch"
+	q := `
+		SELECT id, user_id, branch_id, is_primary
+		FROM user_branch_assignments
+		WHERE user_id = $1 AND branch_id = $2
+		LIMIT 1
+	`
+	var a domain.UserBranchAssignment
+	err := r.pool.QueryRow(ctx, q, userID, branchID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &a, nil
+}
+
+func (r *UserRoleRepository) GetRoleCodesByUser(ctx context.Context, userID uuid.UUID) ([]string, error) {
+	const op = "postgres.UserRoleRepository.GetRoleCodesByUser"
+	q := `
+		SELECT r.code
+		FROM roles r
+		JOIN user_roles ur ON ur.role_id = r.id
+		WHERE ur.user_id = $1 AND ur.revoked_at IS NULL
+	`
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var codes []string
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		codes = append(codes, code)
+	}
+	return codes, nil
 }

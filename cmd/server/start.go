@@ -186,6 +186,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	deps := rest.ServerDeps{
 		Service:           svc,
 		DB:                primaryPool,
+		Store:             store,
 		Logger:            logger,
 		Tracer:            tracer,
 		Metrics:           metricsRegistry,
@@ -217,9 +218,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 		)))
 	}
 
-	authHandler := rest.NewAuthHandler(store, hasher, sessionSvc, tokenMaker, eventPub)
+	mailerSvc, err := infrastructure.NewMailer(ctx, cfg.SMTP, logger)
+	if err != nil {
+		logger.Warn().Err(err).Msg("SMTP mailer failed to initialize, emails disabled")
+		mailerSvc = nil
+	}
+
+	authHandler := rest.NewAuthHandler(store, hasher, sessionSvc, tokenMaker, eventPub, mailerSvc, cfg.Service.BaseURL)
 	authHandler.RegisterRoutes(r)
 	server.RegisterRoutes(r, deps)
+
+	server.RegisterAdminV1Routes(r)
 
 	sm := shutdown.New(10*time.Second, logger)
 	sm.Register("tracer", func(ctx context.Context) error {

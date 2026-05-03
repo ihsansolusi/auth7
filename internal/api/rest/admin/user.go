@@ -70,6 +70,9 @@ func (h *UserHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *UserHandler) handleListUsers(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -101,6 +104,9 @@ func (h *UserHandler) handleListUsers(c *gin.Context) {
 func (h *UserHandler) handleCreateUser(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -131,6 +137,9 @@ func (h *UserHandler) handleCreateUser(c *gin.Context) {
 func (h *UserHandler) handleGetUser(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -154,6 +163,9 @@ func (h *UserHandler) handleGetUser(c *gin.Context) {
 
 func (h *UserHandler) handleUpdateUser(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
@@ -188,6 +200,9 @@ func (h *UserHandler) handleUpdateUser(c *gin.Context) {
 
 func (h *UserHandler) handleDeleteUser(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return

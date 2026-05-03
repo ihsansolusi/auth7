@@ -68,6 +68,9 @@ func (h *RoleHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *RoleHandler) handleListRoles(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -89,6 +92,9 @@ func (h *RoleHandler) handleListRoles(c *gin.Context) {
 
 func (h *RoleHandler) handleCreateRole(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
@@ -116,6 +122,9 @@ func (h *RoleHandler) handleCreateRole(c *gin.Context) {
 func (h *RoleHandler) handleGetRole(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -139,6 +148,9 @@ func (h *RoleHandler) handleGetRole(c *gin.Context) {
 
 func (h *RoleHandler) handleUpdateRole(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
@@ -173,6 +185,9 @@ func (h *RoleHandler) handleUpdateRole(c *gin.Context) {
 
 func (h *RoleHandler) handleDeleteRole(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
