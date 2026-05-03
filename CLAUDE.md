@@ -5,9 +5,10 @@ Panduan konteks untuk Claude AI saat bekerja di repo `ihsansolusi/auth7`.
 ## Identitas Proyek
 
 - **Nama**: Auth7 — Identity & Access Management Platform untuk Core7
-- **Fase saat ini**: 🔄 **IMPLEMENTATION** — Plans 01-12 complete, Plan 11 moved to core7-devroot
+- **Fase saat ini**: ✅ **SELESAI** — Plans 01-12 implemented. Auth-gap endpoints complete. SMTP mailer integrated. Ready for auth7-ui E2E testing (2026-05-03)
 - **Planning Status**: ✅ **COMPLETE** — All specs reviewed, 12 plans, 99 GitHub issues (12 moved to core7-devroot)
 - **Implementation Start**: ✅ COMPLETE — Plans 01 & 02 finished (2026-04-27)
+- **Auth-Gap Status**: ✅ **COMPLETE** — All 6 gap tasks + SMTP mailer + notif7 integration done (2026-05-03)
 - **Root Issue**: [#1 — Auth7 v1.0](https://github.com/ihsansolusi/auth7/issues/1)
 - **Total GitHub Issues**: 111 issues (1 root + 12 plan groups + 98 implementation issues)
 - **Project Board**: [Core7 v2026.1](https://github.com/orgs/ihsansolusi/projects/8)
@@ -61,15 +62,32 @@ Repo ini murni untuk **service Go**. UI terpisah di repo `ihsansolusi/auth7-ui`.
 | [Plan 08](./docs/plans/PLAN-08.md) | ✅ DONE | [#9](https://github.com/ihsansolusi/auth7/issues/9) | #67-75 (9) |
 | [Plan 09](./docs/plans/PLAN-09.md) | ✅ DONE | [#10](https://github.com/ihsansolusi/auth7/issues/10) | #76-81 (6) |
 | [Plan 10](./docs/plans/PLAN-10.md) | ✅ DONE | [#11](https://github.com/ihsansolusi/auth7/issues/11) | #82-91 (10) |
-| [Plan 11](https://github.com/ihsansolusi/core7-devroot/blob/main/docs/plans/integration/PLAN-11-auth7-integration.md) | 📦 MOVED | [core7-devroot#185](https://github.com/ihsansolusi/core7-devroot/issues/185) | [core7-devroot#186-197](https://github.com/ihsansolusi/core7-devroot/issues/185) |
+| [Plan 11](https://github.com/ihsansolusi/core7-devroot/blob/main/docs/plans/integration/PLAN-11-auth7-integration.md) | ✅ DONE | [core7-devroot#185](https://github.com/ihsansolusi/core7-devroot/issues/185) | [core7-devroot#186-197](https://github.com/ihsansolusi/core7-devroot/issues/185) |
 | [Plan 12](./docs/plans/PLAN-12.md) | ✅ DONE | [#105](https://github.com/ihsansolusi/auth7/issues/105) | #106-112 (7) |
 
 ### E2E Test Infrastructure (Ready)
-- `docker-compose.dev.yml` — PostgreSQL, Redis, NATS, auth7, workflow7, policy7, notif7
+- `docker-compose.dev.yml` — PostgreSQL, Redis, NATS, auth7, workflow7, policy7, notif7, Mailpit
 - `configs/nats-dev.conf` — NATS with JetStream enabled
 - `scripts/seed-data.sql` — Test users, roles, branches, OAuth2 clients
 
-> **Note**: Plan 11 moved to core7-devroot (#185). Plan 12 complete. Infrastructure ready for core7 tester E2E session.
+> **Note**: Plan 11 completed via core7-devroot (#185). Plan 12 complete. Auth-gap complete. Infrastructure ready for auth7-ui E2E testing.
+
+### Auth-Gap Implementation (2026-05-03)
+
+| Task | Status | Details |
+|------|--------|---------|
+| MFA Routes (setup/verify/disable) | ✅ DONE | `auth.go:59-64`, handlers at `auth.go:399-549` |
+| Change Password | ✅ DONE | `auth.go:54`, handler at `auth.go:556-640` |
+| Forgot Password + Reset | ✅ DONE | `auth.go:55-56`, handlers at `auth.go:647-768` |
+| Branch ID in JWT Claims | ✅ DONE | Derived from `UserBranchAssignment` at login |
+| Switch Branch (Real Data) | ✅ DONE | `branch.go:172-322`, real DB queries |
+| User Roles in JWT Claims | ✅ DONE | Fetched from `UserRoleRepository` at login |
+| SMTP Mailer (auth7) | ✅ DONE | `internal/mailer/smtp.go` + HTML templates |
+| Email Channel (notif7) | ✅ DONE | `internal/email/` + sqlc + EventService dispatch |
+| Integration (notif7client) | ✅ DONE | `DeliveryChannels: ["in_app","email"]` |
+| Mailpit E2E Test | ✅ DONE | Verification + reset emails received |
+
+**Ready for auth7-ui**: All 11 endpoints available (register, login, verify, forgot-password, reset-password, change-password, mfa/setup, mfa/verify, mfa/disable, branches, branches/switch)
 
 ## Struktur Folder (Planned)
 
@@ -293,4 +311,4 @@ Gunakan Python script dengan GitHub GraphQL API:
 
 ---
 
-*Last updated: 2026-04-24 — Implementation Planning Complete*
+*Last updated: 2026-05-03 — Auth-Gap Complete, Ready for auth7-ui*

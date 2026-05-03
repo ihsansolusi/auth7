@@ -5,6 +5,24 @@
 **Source**: `core7-devroot/docs/test/e2e-auth/v2/GAP-ANALYSIS-REMAINING-SCENARIOS.md`
 **Priority**: CRITICAL — Blocking remaining E2E test scenarios
 
+## Status: ✅ ALL TASKS COMPLETE — Ready for auth7-ui
+
+| # | Task | Status | Evidence |
+|---|------|--------|----------|
+| 1 | Register MFA Routes | ✅ DONE | Routes at `auth.go:59-64`; handlers at `auth.go:399-549` |
+| 2 | Change Password Endpoint | ✅ DONE | Route at `auth.go:54`; handler at `auth.go:556-640` |
+| 3 | Forgot Password + Reset | ✅ DONE | Routes at `auth.go:55-56`; handlers at `auth.go:647-768` |
+| 4 | Branch ID in JWT Claims | ✅ DONE | BranchID in claims (`auth.go:268`), derived from primary branch assignment |
+| 5 | Switch Branch — Data Real | ✅ DONE | Real DB queries in `branch.go:211` (GetByUserID) and `branch.go:285` (GetByUserAndBranch) |
+| 6 | User Roles in JWT Claims | ✅ DONE | Roles fetched from DB at `auth.go:257`, included in claims at `auth.go:267` |
+| 7 | SMTP Mailer (auth7) | ✅ DONE | `internal/mailer/smtp.go` with templates (verify/reset/OTP) |
+| 8 | Email Channel (notif7) | ✅ DONE | `internal/email/` package, sqlc queries, EventService dispatch |
+| 9 | Integration (notif7client) | ✅ DONE | `DeliveryChannels: ["in_app","email"]` on security events |
+| 10 | Mailpit E2E Test | ✅ DONE | Verification + reset emails received in Mailpit |
+
+**Build**: `go build ./...` ✅ | `go vet ./...` ✅ | `go test ./...` ✅
+**Server**: `localhost:8090/health/live` ✅ | `localhost:8090/health/ready` ✅
+
 ---
 
 ## Task 1: Register MFA Routes (quick win — handler sudah ada)
@@ -77,31 +95,20 @@ Recovery/reset flow butuh 2 endpoint yang belum ada.
 Body: { email, org_id }
 ```
 - Cari user by email
-- Generate reset token (UUID) + simpan ke `password_reset_tokens` table (atau Redis dengan TTL 15m)
-- **Dev mode**: return token langsung di response (skip email)
-- **Prod mode**: kirim email dengan link reset
+- Generate reset token (UUID) + simpan ke `verification_tokens` table dengan `TokenTypePasswordRecovery` (TTL 15m)
+- **Prod mode**: kirim email dengan link reset (SMTP mailer)
 - Return: `{ message: "If the email exists, a reset link has been sent" }`
 
 2. `POST /v1/auth/reset-password`:
 ```
 Body: { token, new_password }
 ```
-- Validasi reset token (cek Redis/DB)
+- Validasi reset token (cek DB)
 - Update credential dengan new_password hash
 - Hapus reset token
 - Return: `{ success: true }`
 
-**DB migration** (jika pakai DB untuk reset tokens):
-```sql
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    token VARCHAR(128) NOT NULL UNIQUE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
+**Note**: Tidak perlu migration terpisah — menggunakan `verification_tokens` table yang sudah ada dengan `TokenType = "password_recovery"`.
 
 ---
 
@@ -113,18 +120,22 @@ JWT claims tidak mengandung `branch_id` — user tidak tahu cabang mana yang akt
 ### Changes
 **File**: `internal/api/rest/auth.go`
 
-Di `HandleLogin`, setelah dapat user, cari default branch:
+Di `HandleLogin`, setelah dapat user, cari primary branch dari `UserBranchAssignment`:
 ```go
+var branchID string
+if primaryBranch, err := h.store.UserBranchAssignmentRepository.GetPrimaryByUserID(c.Request.Context(), user.ID); err == nil && primaryBranch != nil {
+    branchID = primaryBranch.BranchID.String()
+}
+
 claims := jwt.Claims{
     Username: user.Username,
     Email:    user.Email,
-    BranchID: user.DefaultBranchID.String(),  // ← tambah
-    Roles:    []string{},
+    Roles:    roles,
+    BranchID: branchID,
 }
 ```
 
-**File**: `internal/domain/user.go` (jika belum ada field)
-Tambahkan `DefaultBranchID uuid.UUID` ke User struct.
+**Note**: BranchID diturunkan dari `UserBranchAssignment` (bukan field di User entity) — ini sesuai dengan desain multi-branch auth7.
 
 ---
 
@@ -151,7 +162,7 @@ Roles selalu kosong `[]string{}`. Userrole tidak dipopulate.
 
 Di `HandleLogin`, query roles user dari DB:
 ```go
-roles, _ := h.store.UserRepository.GetRoles(c.Request.Context(), user.ID, orgID)
+roles, _ := h.store.UserRoleRepository.GetRoleCodesByUser(c.Request.Context(), user.ID)
 claims := jwt.Claims{
     ...
     Roles: roles,
@@ -162,21 +173,19 @@ claims := jwt.Claims{
 
 ## Verification
 
-Setelah semua task selesai, jalankan:
-```bash
-cd /home/galih/Works/projects/banks/core7-devroot/supported-apps/auth7
-go build -o auth7-bin ./cmd/server/
-./auth7-bin start
-```
+Semua endpoint sudah di-test dan berfungsi:
 
-Test endpoints:
 ```bash
+# Health check
+curl http://localhost:8090/health/live     # {"status":"ok"}
+curl http://localhost:8090/health/ready   # {"status":"ready"}
+
 # Change password
 curl -X POST http://localhost:8090/v1/auth/change-password \
   -H "Authorization: Bearer <token>" \
   -d '{"current_password":"...","new_password":"..."}'
 
-# Forgot password
+# Forgot password (sends email via SMTP)
 curl -X POST http://localhost:8090/v1/auth/forgot-password \
   -d '{"email":"e2euser@test.com","org_id":"00000000-0000-0000-0000-000000000001"}'
 
@@ -186,6 +195,24 @@ curl -X POST http://localhost:8090/v1/auth/mfa/setup \
   -d '{"user_id":"...","method":"totp","totp_code":"123456"}'
 
 # List branches
-curl http://localhost:8090/auth/branches \
+curl http://localhost:8090/v1/auth/branches \
   -H "Authorization: Bearer <token>"
 ```
+
+## Ready for auth7-ui
+
+Backend siap untuk E2E testing dengan auth7-ui. Semua endpoint yang dibutuhkan sudah tersedia:
+
+| Endpoint | Method | Auth | Status |
+|----------|--------|------|--------|
+| `/v1/auth/register` | POST | Public | ✅ |
+| `/v1/auth/login` | POST | Public | ✅ |
+| `/v1/auth/verify` | POST | Public | ✅ |
+| `/v1/auth/forgot-password` | POST | Public | ✅ |
+| `/v1/auth/reset-password` | POST | Public | ✅ |
+| `/v1/auth/change-password` | POST | Bearer | ✅ |
+| `/v1/auth/mfa/setup` | POST | Bearer | ✅ |
+| `/v1/auth/mfa/verify` | POST | Bearer | ✅ |
+| `/v1/auth/mfa/disable` | POST | Bearer | ✅ |
+| `/v1/auth/branches` | GET | Bearer | ✅ |
+| `/v1/auth/branches/switch` | POST | Bearer | ✅ |
