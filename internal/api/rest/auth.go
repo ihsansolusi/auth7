@@ -1,6 +1,10 @@
 package rest
 
 import (
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -8,29 +12,37 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
+	"github.com/ihsansolusi/auth7/internal/mailer"
 	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
 	"github.com/ihsansolusi/auth7/internal/service/password"
 	"github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 	"github.com/ihsansolusi/lib7-service-go/token"
+	"github.com/pquerna/otp/totp"
 )
 
 type AuthHandler struct {
 	store      *postgres.Store
 	hasher     *password.Hasher
 	sessionSvc *session.Service
-	tokenMaker token.Maker
-	eventPub   *nats.EventPublisher
+	tokenMaker  token.Maker
+	eventPub    *nats.EventPublisher
+	mailer      mailer.Mailer
+	baseURL     string
+	frontendURL string
 }
 
-func NewAuthHandler(store *postgres.Store, hasher *password.Hasher, sessionSvc *session.Service, tokenMaker token.Maker, eventPub *nats.EventPublisher) *AuthHandler {
+func NewAuthHandler(store *postgres.Store, hasher *password.Hasher, sessionSvc *session.Service, tokenMaker token.Maker, eventPub *nats.EventPublisher, m mailer.Mailer, baseURL string, frontendURL string) *AuthHandler {
 	return &AuthHandler{
-		store:      store,
-		hasher:     hasher,
-		sessionSvc: sessionSvc,
-		tokenMaker: tokenMaker,
-		eventPub:   eventPub,
+		store:       store,
+		hasher:      hasher,
+		sessionSvc:  sessionSvc,
+		tokenMaker:  tokenMaker,
+		eventPub:    eventPub,
+		mailer:      m,
+		baseURL:     baseURL,
+		frontendURL: frontendURL,
 	}
 }
 
@@ -41,6 +53,16 @@ func (h *AuthHandler) RegisterRoutes(r *gin.Engine) {
 		auth.POST("/login", h.HandleLogin)
 		auth.POST("/logout", h.HandleLogout)
 		auth.GET("/me", h.HandleMe)
+		auth.POST("/change-password", h.HandleChangePassword)
+		auth.POST("/forgot-password", h.HandleForgotPassword)
+		auth.POST("/reset-password", h.HandleResetPassword)
+	}
+
+	mfa := auth.Group("/mfa")
+	{
+		mfa.POST("/setup", h.HandleMFASetup)
+		mfa.POST("/verify", h.HandleMFAVerify)
+		mfa.POST("/disable", h.HandleMFADisable)
 	}
 }
 
@@ -146,6 +168,14 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 		return
 	}
 
+	if h.mailer != nil {
+		go func() {
+			verifyURL := fmt.Sprintf("%s/v1/auth/verify?token=%s", h.baseURL, verifyToken)
+			html, _ := mailer.RenderVerificationEmail("Verifikasi Email Auth7", verifyURL)
+			_ = h.mailer.Send(context.Background(), user.Email, "Verifikasi Email Auth7", html)
+		}()
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"user": gin.H{
 			"id":         user.ID.String(),
@@ -208,6 +238,13 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	}
 
 	if user.MFAEnabled && req.MFACode == "" {
+		if user.MFAMethod == domain.MFAMethodEmailOTP && h.mailer != nil {
+			go func() {
+				code := fmt.Sprintf("%06d", time.Now().Unix()%1000000)
+				html, _ := mailer.RenderOTPEmail("Kode Verifikasi Login Auth7", code)
+				_ = h.mailer.Send(context.Background(), user.Email, "Kode Verifikasi Login Auth7", html)
+			}()
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"mfa_required": true,
 			"mfa_type":    string(user.MFAMethod),
@@ -219,10 +256,18 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader("User-Agent")
 
+	roles, _ := h.store.UserRoleRepository.GetRoleCodesByUser(c.Request.Context(), user.ID)
+
+	var branchID string
+	if primaryBranch, err := h.store.UserBranchAssignmentRepository.GetPrimaryByUserID(c.Request.Context(), user.ID); err == nil && primaryBranch != nil {
+		branchID = primaryBranch.BranchID.String()
+	}
+
 	claims := jwt.Claims{
 		Username: user.Username,
 		Email:    user.Email,
-		Roles:    []string{},
+		Roles:    roles,
+		BranchID: branchID,
 	}
 
 	result, err := h.sessionSvc.CreateSession(c.Request.Context(), user.ID, orgID, ipAddress, userAgent, claims)
@@ -393,4 +438,361 @@ func (h *AuthHandler) HandleMFASetup(c *gin.Context) {
 		"method":  req.Method,
 		"user_id": userID.String(),
 	})
+}
+
+type MFAVerifyRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+	Code   string `json:"code" binding:"required"`
+}
+
+func (h *AuthHandler) HandleMFAVerify(c *gin.Context) {
+	var req MFAVerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+
+	cfg, err := h.store.MFAConfigRepository.GetByUserID(c.Request.Context(), userID)
+	if err != nil || cfg == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "mfa config not found"})
+		return
+	}
+
+	if !cfg.IsFullyEnabled() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "mfa not fully enabled"})
+		return
+	}
+
+	verified := false
+	if cfg.IsTOTPEnabled && len(cfg.TOTPSecretEncrypted) > 0 {
+		secretBytes, decErr := h.decryptTOTPSecret(cfg.TOTPSecretEncrypted, cfg.TOTPSecretIV)
+		if decErr == nil {
+			verified = validateTOTPCode(secretBytes, req.Code)
+		}
+	}
+
+	if !verified && cfg.IsEmailOTPEnabled {
+		emailCode, emailErr := h.store.EmailOTPCodeRepository.GetActiveByUserID(c.Request.Context(), userID)
+		if emailErr == nil && emailCode != nil && emailCode.IsValid() && emailCode.Code == req.Code {
+			verified = true
+			h.store.EmailOTPCodeRepository.MarkUsed(c.Request.Context(), emailCode.ID)
+		}
+	}
+
+	if !verified {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid code"})
+		return
+	}
+
+	user, err := h.store.UserRepository.GetByID(c.Request.Context(), userID)
+	if err == nil && user != nil {
+		user.MFAEnabled = true
+		user.UpdatedAt = time.Now()
+		h.store.UserRepository.Update(c.Request.Context(), user)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"verified": true,
+	})
+}
+
+type MFADisableRequest struct {
+	UserID string `json:"user_id" binding:"required"`
+}
+
+func (h *AuthHandler) HandleMFADisable(c *gin.Context) {
+	var req MFADisableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		return
+	}
+
+	cfg, err := h.store.MFAConfigRepository.GetByUserID(c.Request.Context(), userID)
+	if err != nil || cfg == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "mfa config not found"})
+		return
+	}
+
+	cfg.IsTOTPEnabled = false
+	cfg.IsEmailOTPEnabled = false
+	cfg.IsBackupCodesEnabled = false
+	cfg.TOTPSecretEncrypted = nil
+	cfg.TOTPSecretIV = nil
+	cfg.BackupCodesHash = nil
+	cfg.MFAEnabledAt = nil
+	cfg.UpdatedAt = time.Now()
+
+	if err := h.store.MFAConfigRepository.Update(c.Request.Context(), cfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disable mfa"})
+		return
+	}
+
+	user, err := h.store.UserRepository.GetByID(c.Request.Context(), userID)
+	if err == nil && user != nil {
+		user.MFAEnabled = false
+		user.MFAMethod = domain.MFAMethodNone
+		user.UpdatedAt = time.Now()
+		h.store.UserRepository.Update(c.Request.Context(), user)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+}
+
+func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	tokenStr := strings.TrimPrefix(auth, "Bearer ")
+	if tokenStr == auth {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	claims, err := h.sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	cred, err := h.store.CredentialRepository.GetCurrentByUserID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credential"})
+		return
+	}
+
+	if !h.hasher.Verify(req.CurrentPassword, cred.SecretHash) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "current password is incorrect"})
+		return
+	}
+
+	if err := domain.DefaultPasswordPolicy.Validate(req.NewPassword, claims.Username, claims.Email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newHash, err := h.hasher.Hash(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	cred.IsCurrent = false
+	cred.ExpiresAt = func() *time.Time { t := time.Now(); return &t }()
+	if err := h.store.CredentialRepository.Update(c.Request.Context(), cred); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update credential"})
+		return
+	}
+
+	newCred := &domain.UserCredential{
+		ID:             uuid.Must(uuid.NewV7()),
+		UserID:         userID,
+		CredentialType: domain.CredentialTypePassword,
+		SecretHash:     newHash,
+		Version:        cred.Version + 1,
+		IsCurrent:      true,
+		CreatedAt:      time.Now(),
+	}
+
+	if err := h.store.CredentialRepository.Create(c.Request.Context(), newCred); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create new credential"})
+		return
+	}
+
+	user, err := h.store.UserRepository.GetByID(c.Request.Context(), userID)
+	if err == nil && user != nil {
+		now := time.Now()
+		user.PasswordChangedAt = &now
+		user.UpdatedAt = now
+		h.store.UserRepository.Update(c.Request.Context(), user)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+type ForgotPasswordRequest struct {
+	Email     string `json:"email"      binding:"required,email"`
+	OrgID     string `json:"org_id"     binding:"required"`
+	ReturnURL string `json:"return_url"` // optional: calling app origin, embedded in email link
+}
+
+func (h *AuthHandler) HandleForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	orgID, err := uuid.Parse(req.OrgID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
+		return
+	}
+
+	email := domain.NormalizeEmail(req.Email)
+	user, err := h.store.UserRepository.GetByEmail(c.Request.Context(), orgID, email)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a reset link has been sent"})
+		return
+	}
+
+	resetToken := uuid.New().String()
+	vt := &domain.VerificationToken{
+		ID:        uuid.Must(uuid.NewV7()),
+		UserID:    user.ID,
+		Token:     resetToken,
+		TokenType: domain.TokenTypePasswordRecovery,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+		CreatedAt: time.Now(),
+	}
+
+	if err := h.store.VerificationTokenRepository.Create(c.Request.Context(), vt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create reset token"})
+		return
+	}
+
+	if h.mailer != nil {
+		go func() {
+			uiBase := h.frontendURL
+			if uiBase == "" {
+				uiBase = h.baseURL
+			}
+			resetURL := fmt.Sprintf("%s/reset-password?token=%s", uiBase, resetToken)
+			if req.ReturnURL != "" {
+				resetURL += "&return_to=" + req.ReturnURL
+			}
+			html, _ := mailer.RenderResetEmail("Reset Password Auth7", resetURL)
+			_ = h.mailer.Send(context.Background(), user.Email, "Reset Password Auth7", html)
+		}()
+	}
+
+	// Return reset_token for dev/test use — auth7-ui proxy strips it before sending to browser
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "If the email exists, a reset link has been sent",
+		"reset_token": resetToken,
+	})
+}
+
+type ResetPasswordRequest struct {
+	Token        string `json:"token" binding:"required"`
+	NewPassword  string `json:"new_password" binding:"required"`
+}
+
+func (h *AuthHandler) HandleResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	vt, err := h.store.VerificationTokenRepository.GetByToken(c.Request.Context(), req.Token)
+	if err != nil || vt == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired reset token"})
+		return
+	}
+
+	if !vt.IsValid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired reset token"})
+		return
+	}
+
+	if vt.TokenType != domain.TokenTypePasswordRecovery {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid token type"})
+		return
+	}
+
+	if err := domain.DefaultPasswordPolicy.Validate(req.NewPassword, "", ""); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newHash, err := h.hasher.Hash(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	cred, err := h.store.CredentialRepository.GetCurrentByUserID(c.Request.Context(), vt.UserID)
+	if err == nil && cred != nil {
+		cred.IsCurrent = false
+		cred.ExpiresAt = func() *time.Time { t := time.Now(); return &t }()
+		h.store.CredentialRepository.Update(c.Request.Context(), cred)
+	}
+
+	newCred := &domain.UserCredential{
+		ID:             uuid.Must(uuid.NewV7()),
+		UserID:         vt.UserID,
+		CredentialType: domain.CredentialTypePassword,
+		SecretHash:     newHash,
+		Version:        1,
+		IsCurrent:      true,
+		CreatedAt:      time.Now(),
+	}
+
+	if err := h.store.CredentialRepository.Create(c.Request.Context(), newCred); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+		return
+	}
+
+	h.store.VerificationTokenRepository.MarkUsed(c.Request.Context(), vt.ID)
+
+	user, err := h.store.UserRepository.GetByID(c.Request.Context(), vt.UserID)
+	if err == nil && user != nil {
+		now := time.Now()
+		user.PasswordChangedAt = &now
+		user.UpdatedAt = now
+		h.store.UserRepository.Update(c.Request.Context(), user)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (h *AuthHandler) decryptTOTPSecret(encrypted, iv []byte) (string, error) {
+	key := []byte("auth7-mfa-secret-key-32bytes!!")
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	if len(encrypted) < aes.BlockSize {
+		return "", err
+	}
+	stream := cipher.NewCFBDecrypter(block, iv)
+	decrypted := make([]byte, len(encrypted))
+	stream.XORKeyStream(decrypted, encrypted)
+	return string(decrypted), nil
+}
+
+func validateTOTPCode(secret, code string) bool {
+	return totp.Validate(code, secret)
 }

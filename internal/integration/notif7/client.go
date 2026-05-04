@@ -33,11 +33,14 @@ func (c *Client) SendLoginNewDevice(ctx context.Context, params LoginNewDevicePa
 	const op = "notif7.SendLoginNewDevice"
 
 	event := notif7client.Event{
-		Source:    "auth7",
-		EventType: "auth.login_new_device",
-		UserIDs:   []string{params.UserID},
-		Title:     "New login detected",
-		Body:      fmt.Sprintf("New login to your account on %s from IP %s (%s)", params.DeviceName, params.IPAddress, params.Location),
+		Source:           "auth7",
+		EventType:        "auth.login_new_device",
+		UserIDs:          []string{params.UserID},
+		Title:            "Login dari device baru terdeteksi",
+		Body:             fmt.Sprintf("Login baru pada akun Anda di %s dari IP %s (%s)", params.DeviceName, params.IPAddress, params.Location),
+		RefURL:           "/profile/security",
+		DeliveryChannels: []string{"in_app", "email"},
+		EmailAddresses:   []string{params.Email},
 		Payload: map[string]any{
 			"username":    params.Username,
 			"email":       params.Email,
@@ -71,11 +74,14 @@ func (c *Client) SendAccountLocked(ctx context.Context, params AccountLockedPara
 	const op = "notif7.SendAccountLocked"
 
 	event := notif7client.Event{
-		Source:    "auth7",
-		EventType: "auth.account_locked",
-		UserIDs:   []string{params.UserID},
-		Title:     "Account locked",
-		Body:      fmt.Sprintf("Your account has been locked due to: %s", params.Reason),
+		Source:           "auth7",
+		EventType:        "auth.account_locked",
+		UserIDs:          []string{params.UserID},
+		Title:            "Akun Anda dikunci sementara",
+		Body:             fmt.Sprintf("Terdeteksi percobaan login gagal berturut-turut. Akun dikunci. Alasan: %s", params.Reason),
+		RefURL:           "/profile/security",
+		DeliveryChannels: []string{"in_app", "email"},
+		EmailAddresses:   []string{params.Email},
 		Payload: map[string]any{
 			"username":  params.Username,
 			"email":     params.Email,
@@ -145,11 +151,14 @@ func (c *Client) SendMfaReset(ctx context.Context, params MfaResetParams) error 
 	const op = "notif7.SendMfaReset"
 
 	event := notif7client.Event{
-		Source:    "auth7",
-		EventType: "auth.mfa_reset",
-		UserIDs:   []string{params.UserID},
-		Title:     "MFA reset",
-		Body:      "Your MFA settings have been reset by an administrator.",
+		Source:           "auth7",
+		EventType:        "auth.mfa_reset",
+		UserIDs:          []string{params.UserID},
+		Title:            "MFA di-reset oleh admin",
+		Body:             "Pengaturan MFA Anda telah di-reset oleh administrator. Silakan konfigurasi ulang MFA Anda.",
+		RefURL:           "/profile/security",
+		DeliveryChannels: []string{"in_app", "email"},
+		EmailAddresses:   []string{params.Email},
 		Payload: map[string]any{
 			"username":   params.Username,
 			"email":      params.Email,

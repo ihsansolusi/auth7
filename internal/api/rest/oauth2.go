@@ -23,6 +23,7 @@ func (s *Server) RegisterOAuth2Routes(r *gin.Engine) {
 		oauth.GET("/authorize", s.handleAuthorize)
 		oauth.POST("/authorize-with-session", s.handleAuthorizeWithSession)
 		oauth.POST("/token", s.handleToken)
+		oauth.POST("/introspect", s.handleIntrospect)
 		oauth.GET("/userinfo", s.handleUserInfo)
 		oauth.POST("/register", s.handleDCR)
 	}
@@ -215,6 +216,8 @@ func (s *Server) handleAuthorizeWithSession(c *gin.Context) {
 		Username:            claims.Username,
 		Email:               claims.Email,
 		OrgID:               client.OrgID,
+		Roles:               claims.Roles,
+		BranchID:            claims.BranchID,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 	})
@@ -342,6 +345,56 @@ func (s *Server) handleClientCredentials(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// handleIntrospect — POST /oauth2/introspect (RFC 7662)
+func (s *Server) handleIntrospect(c *gin.Context) {
+	token := c.PostForm("token")
+	tokenTypeHint := c.PostForm("token_type_hint")
+
+	if token == "" {
+		// Also check Authorization header
+		if auth := c.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+			token = auth[7:]
+		}
+	}
+
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "token is required"})
+		return
+	}
+
+	_, _, ok := parseBasicAuth(c.GetHeader("Authorization"))
+	if !ok {
+		clientID := c.PostForm("client_id")
+		clientSecret := c.PostForm("client_secret")
+		if clientID == "" || clientSecret == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+			return
+		}
+		// Validate client
+		if s.deps.OAuth2ClientSvc != nil {
+			client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
+			if err != nil || !client.IsActive || !verifyClientSecret(clientSecret, client.ClientSecretHash) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+				return
+			}
+		}
+	}
+
+	if s.deps.OAuth2TokenSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	resp, err := s.deps.OAuth2TokenSvc.IntrospectToken(c.Request.Context(), token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+	_ = tokenTypeHint
 }
 
 // handleUserInfo — GET /oauth2/userinfo

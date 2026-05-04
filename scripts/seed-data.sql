@@ -136,7 +136,9 @@ VALUES
     ('00000000-0000-0000-0000-000000000901', 'bos7-portal', '00000000-0000-0000-0000-000000000001', 'BOS7 Portal', 'Main banking portal', 'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3000/callback,https://bos7.bank-demo.co.id/callback}', true),
     ('00000000-0000-0000-0000-000000000902', 'workflow7-web', '00000000-0000-0000-0000-000000000001', 'Workflow7 Web', 'Workflow management UI', 'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3001/callback,https://workflow7.bank-demo.co.id/callback}', true),
     ('00000000-0000-0000-0000-000000000903', 'core7-api', '00000000-0000-0000-0000-000000000001', 'Core7 API', 'M2M service client', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true),
-    ('00000000-0000-0000-0000-000000000904', 'mobile-app', '00000000-0000-0000-0000-000000000001', 'Mobile Banking App', 'iOS/Android app', 'native', 'none', '{openid,profile,email}', '{bankdemo://callback}', true)
+    ('00000000-0000-0000-0000-000000000904', 'mobile-app', '00000000-0000-0000-0000-000000000001', 'Mobile Banking App', 'iOS/Android app', 'native', 'none', '{openid,profile,email}', '{bankdemo://callback}', true),
+    ('00000000-0000-0000-0000-000000000905', 'workflow7-svc', '00000000-0000-0000-0000-000000000001', 'Workflow7 Service', 'M2M service client for workflow7', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true),
+    ('00000000-0000-0000-0000-000000000906', 'notif7-svc', '00000000-0000-0000-0000-000000000001', 'Notif7 Service', 'M2M service client for notif7', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- ──────────────────────────────────────────────

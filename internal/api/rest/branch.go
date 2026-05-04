@@ -1,10 +1,14 @@
 package rest
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/service/jwt"
+	"github.com/ihsansolusi/auth7/internal/store/postgres"
 )
 
 func (s *Server) RegisterBranchRoutes(r *gin.Engine) {
@@ -172,17 +176,70 @@ func (s *Server) handleListUserBranches(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"branches": []gin.H{
-			{"id": uuid.New().String(), "code": "KC-BDG-001", "name": "Kantor Cabang Bandung", "role": "teller", "is_primary": true},
-			{"id": uuid.New().String(), "code": "KCP-DGO-001", "name": "KCP Dago", "role": "teller", "is_primary": false},
-		},
+	tokenStr := trimBearer(auth)
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	sessionSvc, ok := s.deps.SessionSvc.(interface {
+		VerifyAccessToken(ctx context.Context, token string) (*jwt.Claims, error)
 	})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "session service unavailable"})
+		return
+	}
+
+	claims, err := sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	store, ok := s.deps.Store.(*postgres.Store)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"branches": []interface{}{}})
+		return
+	}
+
+	assignments, err := store.UserBranchAssignmentRepository.GetByUserID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"branches": []interface{}{}})
+		return
+	}
+
+	branches := make([]gin.H, 0, len(assignments))
+	for _, a := range assignments {
+		branchInfo := gin.H{
+			"id":          a.BranchID.String(),
+			"org_id":      a.OrgID.String(),
+			"role":        a.Role,
+			"is_primary":  a.IsPrimary,
+			"assigned_at": a.AssignedAt,
+		}
+		// Look up branch code and name from branches table
+		var code, name string
+		err := store.Pool().QueryRow(c.Request.Context(),
+			"SELECT code, name FROM branches WHERE id = $1", a.BranchID).Scan(&code, &name)
+		if err == nil {
+			branchInfo["code"] = code
+			branchInfo["name"] = name
+		}
+		branches = append(branches, branchInfo)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"branches": branches})
 }
 
 func (s *Server) handleSwitchBranch(c *gin.Context) {
 	var req struct {
-		BranchID string `json:"branch_id"`
+		BranchID string `json:"branch_id" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -196,8 +253,87 @@ func (s *Server) handleSwitchBranch(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"branch_id":   req.BranchID,
-		"switched_at": "2026-04-27T10:00:00Z",
+	tokenStr := trimBearer(auth)
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	sessionSvc, ok := s.deps.SessionSvc.(interface {
+		VerifyAccessToken(ctx context.Context, token string) (*jwt.Claims, error)
 	})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "session service unavailable"})
+		return
+	}
+
+	claims, err := sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+
+	store, ok := s.deps.Store.(*postgres.Store)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "store unavailable"})
+		return
+	}
+
+	branchID, err := uuid.Parse(req.BranchID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid branch_id"})
+		return
+	}
+
+	assignment, err := store.UserBranchAssignmentRepository.GetByUserAndBranch(c.Request.Context(), userID, branchID)
+	if err != nil || assignment == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "user not assigned to this branch"})
+		return
+	}
+
+	jwtSvc, ok := s.deps.JWTSvc.(interface {
+		IssueAccessToken(sessionID string, userID, orgID uuid.UUID, claims jwt.Claims) (string, *jwt.AccessToken, error)
+	})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "jwt service unavailable"})
+		return
+	}
+
+	orgID, _ := uuid.Parse(claims.OrgID)
+
+	newClaims := jwt.Claims{
+		Username: claims.Username,
+		Email:    claims.Email,
+		Roles:    claims.Roles,
+		BranchID: branchID.String(),
+	}
+
+	newSessionID := uuid.New().String()
+	newAccessToken, _, err := jwtSvc.IssueAccessToken(newSessionID, userID, orgID, newClaims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue new token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": newAccessToken,
+		"token_type":   "Bearer",
+		"expires_in":   900,
+		"branch_id":    branchID.String(),
+		"switched_at":  time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func trimBearer(auth string) string {
+	const prefix = "Bearer "
+	if len(auth) < len(prefix) || auth[:len(prefix)] != prefix {
+		return ""
+	}
+	return auth[len(prefix):]
 }

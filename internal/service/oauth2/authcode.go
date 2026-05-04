@@ -19,6 +19,8 @@ type AuthCode struct {
 	Username           string
 	Email              string
 	OrgID              uuid.UUID
+	Roles              []string
+	BranchID           string
 	CodeChallenge      string
 	CodeChallengeMethod string
 	ExpiresAt          time.Time
@@ -82,6 +84,8 @@ func (s *AuthorizationCodeService) CreateAuthCode(ctx context.Context, params Au
 		Username:           params.Username,
 		Email:              params.Email,
 		OrgID:              params.OrgID,
+		Roles:              params.Roles,
+		BranchID:           params.BranchID,
 		CodeChallenge:      params.CodeChallenge,
 		CodeChallengeMethod: params.CodeChallengeMethod,
 		ExpiresAt:          time.Now().Add(5 * time.Minute),
@@ -127,6 +131,8 @@ type AuthCodeParams struct {
 	Username            string
 	Email               string
 	OrgID               uuid.UUID
+	Roles               []string
+	BranchID            string
 	CodeChallenge       string
 	CodeChallengeMethod string
 }

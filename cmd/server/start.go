@@ -224,7 +224,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		mailerSvc = nil
 	}
 
-	authHandler := rest.NewAuthHandler(store, hasher, sessionSvc, tokenMaker, eventPub, mailerSvc, cfg.Service.BaseURL)
+	authHandler := rest.NewAuthHandler(store, hasher, sessionSvc, tokenMaker, eventPub, mailerSvc, cfg.Service.BaseURL, cfg.Service.FrontendURL)
 	authHandler.RegisterRoutes(r)
 	server.RegisterRoutes(r, deps)
 

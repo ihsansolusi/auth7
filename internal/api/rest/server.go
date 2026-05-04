@@ -18,6 +18,7 @@ import (
 type ServerDeps struct {
 	Service      any
 	DB           any
+	Store        any
 	Logger       zerolog.Logger
 	Tracer       trace.Tracer
 	Metrics      *metrics.Registry

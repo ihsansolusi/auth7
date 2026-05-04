@@ -57,6 +57,8 @@ func (s *TokenService) ExchangeCodeForTokens(ctx context.Context, code, codeVeri
 		Scope:    authCode.Scope,
 		Username: authCode.Username,
 		Email:    authCode.Email,
+		Roles:    authCode.Roles,
+		BranchID: authCode.BranchID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", opTokenExchange, err)

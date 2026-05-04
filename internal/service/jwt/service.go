@@ -25,6 +25,7 @@ type Claims struct {
 	BranchID    string   `json:"branch_id,omitempty"`
 }
 
+
 type AccessToken struct {
 	TokenID   string
 	SessionID string

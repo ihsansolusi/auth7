@@ -11,6 +11,7 @@ type ServiceConfig struct {
 	Profile      string `mapstructure:"profile"        validate:"required,oneof=internal external"`
 	Version      string `mapstructure:"version"`
 	BaseURL      string `mapstructure:"base_url"`      // e.g. http://localhost:8090 (used for OIDC discovery)
+	FrontendURL  string `mapstructure:"frontend_url"`  // e.g. http://localhost:3008 (auth7-ui, used for email links)
 	DefaultOrgID string `mapstructure:"default_org_id"` // UUID of default org for DCR without auth context
 }
 
@@ -139,6 +140,19 @@ type GRPCConfig struct {
 	Timeout  time.Duration `mapstructure:"timeout"`
 }
 
+type SMTPConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
+	StartTLS bool   `mapstructure:"starttls"`
+}
+
+func (c SMTPConfig) IsConfigured() bool {
+	return c.Host != "" && c.Port > 0
+}
+
 type Config struct {
 	Service    ServiceConfig    `mapstructure:"service"`
 	Server     ServerConfig     `mapstructure:"server"`
@@ -153,6 +167,7 @@ type Config struct {
 	Logging    LoggingConfig    `mapstructure:"logging"`
 	NATS       NATSConfig       `mapstructure:"nats"`
 	External   ExternalConfig   `mapstructure:"external"`
+	SMTP       SMTPConfig       `mapstructure:"smtp"`
 }
 
 func Load(configPath string) (*Config, error) {
