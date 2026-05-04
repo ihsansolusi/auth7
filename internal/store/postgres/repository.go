@@ -191,7 +191,7 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 			username = $2, email = $3, full_name = $4, status = $5,
 			email_verified = $6, mfa_enabled = $7, mfa_method = $8, mfa_reset_required = $9,
 			require_password_change = $10, failed_login_attempts = $11, locked_until = $12,
-			last_login_at = $13, last_login_ip = $14, password_changed_at = $15,
+			last_login_at = $13, last_login_ip = nullif($14, '')::inet, password_changed_at = $15,
 			updated_at = $16, updated_by = $17
 		WHERE id = $1 AND deleted_at IS NULL
 	`

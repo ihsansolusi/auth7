@@ -53,6 +53,7 @@ func (h *AuthHandler) RegisterRoutes(r *gin.Engine) {
 		auth.POST("/login", h.HandleLogin)
 		auth.POST("/logout", h.HandleLogout)
 		auth.GET("/me", h.HandleMe)
+		auth.PUT("/profile", h.HandleUpdateProfile)
 		auth.POST("/change-password", h.HandleChangePassword)
 		auth.POST("/forgot-password", h.HandleForgotPassword)
 		auth.POST("/reset-password", h.HandleResetPassword)
@@ -388,6 +389,66 @@ func (h *AuthHandler) HandleMe(c *gin.Context) {
 		"email_verified":    user.EmailVerified,
 		"mfa_enabled":       user.MFAEnabled,
 		"last_login_at":     user.LastLoginAt,
+	})
+}
+
+type UpdateProfileRequest struct {
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+}
+
+func (h *AuthHandler) HandleUpdateProfile(c *gin.Context) {
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+	tokenStr := strings.TrimPrefix(auth, "Bearer ")
+	if tokenStr == auth {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+	claims, err := h.sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+		return
+	}
+	user, err := h.store.UserRepository.GetByID(c.Request.Context(), userID)
+	if err != nil || user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": err.Error()})
+		return
+	}
+	if req.FullName != "" {
+		user.FullName = req.FullName
+	}
+	if req.Email != "" {
+		user.Email = req.Email
+	}
+	user.UpdatedAt = time.Now()
+	if err := h.store.UserRepository.Update(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update_failed", "message": "Gagal memperbarui profil"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"id":             user.ID.String(),
+		"username":       user.Username,
+		"email":          user.Email,
+		"full_name":      user.FullName,
+		"status":         user.Status,
+		"org_id":         user.OrgID.String(),
+		"email_verified": user.EmailVerified,
+		"mfa_enabled":    user.MFAEnabled,
+		"updated_at":     user.UpdatedAt,
 	})
 }
 
