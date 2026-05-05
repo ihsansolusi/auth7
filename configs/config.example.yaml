@@ -7,7 +7,7 @@ service:
   version: dev
 
 server:
-  port: 8081
+  port: ${SERVER_PORT:-8083}
   request_timeout: 30s
   read_timeout: 30s
   write_timeout: 30s
@@ -50,8 +50,10 @@ casbin:
 security:
   cors:
     allowed_origins:
-      - "http://localhost:3000"
-      - "http://localhost:8081"
+      - "http://localhost:3001"
+      - "http://localhost:3002"
+      - "http://localhost:3004"
+      - "http://localhost:3006"
     allowed_methods:
       - GET
       - POST

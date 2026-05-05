@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -174,6 +175,7 @@ func Load(configPath string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(configPath)
 	v.SetConfigType("yaml")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
 	if err := v.ReadInConfig(); err != nil {
