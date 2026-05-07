@@ -1,11 +1,27 @@
 package config
 
 import (
+	"bytes"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 )
+
+// expandEnv expands ${VAR} and ${VAR:-default} in s using os.Expand.
+func expandEnv(s string) string {
+	return os.Expand(s, func(key string) string {
+		if idx := strings.Index(key, ":-"); idx >= 0 {
+			varName, defaultVal := key[:idx], key[idx+2:]
+			if val, ok := os.LookupEnv(varName); ok && val != "" {
+				return val
+			}
+			return defaultVal
+		}
+		return os.Getenv(key)
+	})
+}
 
 type ServiceConfig struct {
 	Name         string `mapstructure:"name"           validate:"required"`
@@ -172,13 +188,17 @@ type Config struct {
 }
 
 func Load(configPath string) (*Config, error) {
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
 	v := viper.New()
-	v.SetConfigFile(configPath)
 	v.SetConfigType("yaml")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
-	if err := v.ReadInConfig(); err != nil {
+	if err := v.ReadConfig(bytes.NewReader([]byte(expandEnv(string(raw))))); err != nil {
 		return nil, err
 	}
 
