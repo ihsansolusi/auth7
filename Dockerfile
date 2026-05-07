@@ -31,10 +31,10 @@ RUN apk --no-cache add ca-certificates
 
 USER appuser
 
-EXPOSE 8081
+EXPOSE 8083
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-    CMD wget -qO- http://localhost:8081/health/live || exit 1
+    CMD wget -qO- http://localhost:8083/health/live || exit 1
 
 ENTRYPOINT ["./auth7"]
 CMD ["start"]
