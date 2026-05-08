@@ -130,15 +130,34 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ──────────────────────────────────────────────
 -- 9. OAuth2 Clients
+-- redirect_uris per web client includes 3 environments:
+--   1. http://localhost:PORT  (dev direct)
+--   2. https://<app>.bos7.local  (dev nginx)
+--   3. https://<app>.dev.ihsansolusi.co.id  (Railway/staging)
 -- ──────────────────────────────────────────────
 INSERT INTO oauth2_clients (id, client_id, org_id, name, description, client_type, token_endpoint_auth_method, allowed_scopes, allowed_redirect_uris, is_active)
 VALUES
-    ('00000000-0000-0000-0000-000000000901', 'bos7-portal', '00000000-0000-0000-0000-000000000001', 'BOS7 Portal', 'Main banking portal', 'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3000/callback,https://bos7.bank-demo.co.id/callback}', true),
-    ('00000000-0000-0000-0000-000000000902', 'workflow7-web', '00000000-0000-0000-0000-000000000001', 'Workflow7 Web', 'Workflow management UI', 'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3001/callback,https://workflow7.bank-demo.co.id/callback}', true),
-    ('00000000-0000-0000-0000-000000000903', 'core7-api', '00000000-0000-0000-0000-000000000001', 'Core7 API', 'M2M service client', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true),
-    ('00000000-0000-0000-0000-000000000904', 'mobile-app', '00000000-0000-0000-0000-000000000001', 'Mobile Banking App', 'iOS/Android app', 'native', 'none', '{openid,profile,email}', '{bankdemo://callback}', true),
-    ('00000000-0000-0000-0000-000000000905', 'workflow7-svc', '00000000-0000-0000-0000-000000000001', 'Workflow7 Service', 'M2M service client for workflow7', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true),
-    ('00000000-0000-0000-0000-000000000906', 'notif7-svc', '00000000-0000-0000-0000-000000000001', 'Notif7 Service', 'M2M service client for notif7', 'machine', 'client_secret_basic', '{openid,profile}', '{}', true)
+    -- Web clients (user-facing)
+    ('00000000-0000-0000-0000-000000000901', 'bos7-portal',         '00000000-0000-0000-0000-000000000001', 'BOS7 Portal',         'Main banking portal launcher',            'web', 'client_secret_basic', '{openid,profile,email,roles,offline_access}', '{http://localhost:3006/api/auth/callback,https://portal.bos7.local/api/auth/callback,https://portal.dev.ihsansolusi.co.id/api/auth/callback,https://bos7-portal-development.up.railway.app/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000902', 'workflow7-web',        '00000000-0000-0000-0000-000000000001', 'Workflow7 Web',        'Workflow & BPM management UI',            'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3002/api/auth/callback,https://workflow.bos7.local/api/auth/callback,https://workflow.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000907', 'auth7-ui-dev',         '00000000-0000-0000-0000-000000000001', 'Auth7 UI Dev',         'Auth7 dashboard (admin panel)',            'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3001/api/auth/callback,https://auth.bos7.local/api/auth/callback,https://auth.dev.ihsansolusi.co.id/api/auth/callback,https://auth7-ui-development.up.railway.app/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000908', 'bos7-template',        '00000000-0000-0000-0000-000000000001', 'BOS7 Template',        'Next.js app template / dev scaffold',     'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3004/api/auth/callback,https://template.bos7.local/api/auth/callback,https://template.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000909', 'bos7-enterprise',      '00000000-0000-0000-0000-000000000001', 'BOS7 Enterprise',      'Enterprise management module',            'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3003/api/auth/callback,https://enterprise.bos7.local/api/auth/callback,https://enterprise.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000910', 'bos7-financing',       '00000000-0000-0000-0000-000000000001', 'BOS7 Financing',       'Financing (pembiayaan) module',           'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3010/api/auth/callback,https://financing.bos7.local/api/auth/callback,https://financing.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000911', 'bos7-funding',         '00000000-0000-0000-0000-000000000001', 'BOS7 Funding',         'Funding (pendanaan) module',              'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3011/api/auth/callback,https://funding.bos7.local/api/auth/callback,https://funding.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000912', 'bos7-treasury',        '00000000-0000-0000-0000-000000000001', 'BOS7 Treasury',        'Treasury management module',              'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3012/api/auth/callback,https://treasury.bos7.local/api/auth/callback,https://treasury.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000913', 'bos7-smt',             '00000000-0000-0000-0000-000000000001', 'BOS7 SMT',             'SMT module',                              'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3013/api/auth/callback,https://smt.bos7.local/api/auth/callback,https://smt.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000914', 'bos7-accounting',      '00000000-0000-0000-0000-000000000001', 'BOS7 Accounting',      'Accounting (akuntansi) module',           'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3014/api/auth/callback,https://accounting.bos7.local/api/auth/callback,https://accounting.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000915', 'bos7-cif',             '00000000-0000-0000-0000-000000000001', 'BOS7 CIF',             'Customer Information File module',        'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3015/api/auth/callback,https://cif.bos7.local/api/auth/callback,https://cif.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000916', 'bos7-internalaccount', '00000000-0000-0000-0000-000000000001', 'BOS7 InternalAccount', 'Internal account management module',     'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3016/api/auth/callback,https://internalaccount.bos7.local/api/auth/callback,https://internalaccount.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000917', 'bos7-remittance',      '00000000-0000-0000-0000-000000000001', 'BOS7 Remittance',      'Remittance module',                       'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3017/api/auth/callback,https://remittance.bos7.local/api/auth/callback,https://remittance.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    ('00000000-0000-0000-0000-000000000918', 'bos7-batchprocessing', '00000000-0000-0000-0000-000000000001', 'BOS7 BatchProcessing', 'Batch processing module',                 'web', 'client_secret_basic', '{openid,profile,email,roles}', '{http://localhost:3018/api/auth/callback,https://batchprocessing.bos7.local/api/auth/callback,https://batchprocessing.dev.ihsansolusi.co.id/api/auth/callback}', true),
+    -- Mobile client
+    ('00000000-0000-0000-0000-000000000904', 'mobile-app',           '00000000-0000-0000-0000-000000000001', 'Mobile Banking App',   'iOS/Android app',                         'native',  'none',                '{openid,profile,email}',        '{bankdemo://callback}', true),
+    -- Machine clients (M2M, no redirect URIs)
+    ('00000000-0000-0000-0000-000000000903', 'core7-api',            '00000000-0000-0000-0000-000000000001', 'Core7 API',            'M2M service client (generic)',            'machine', 'client_secret_basic', '{openid,profile}',              '{}', true),
+    ('00000000-0000-0000-0000-000000000905', 'workflow7-svc',        '00000000-0000-0000-0000-000000000001', 'Workflow7 Service',    'M2M service client for workflow7',        'machine', 'client_secret_basic', '{openid,profile}',              '{}', true),
+    ('00000000-0000-0000-0000-000000000906', 'notif7-svc',           '00000000-0000-0000-0000-000000000001', 'Notif7 Service',       'M2M service client for notif7',           'machine', 'client_secret_basic', '{openid,profile}',              '{}', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- ──────────────────────────────────────────────
@@ -159,10 +178,12 @@ ON CONFLICT (id) DO NOTHING;
 --   - jane@bank-demo.co.id / Password123! (supervisor, MFA enabled)
 --   - teller@bank-demo.co.id / Password123! (teller)
 --
--- OAuth2 Clients:
---   - bos7-portal (web, client_secret_basic)
---   - workflow7-web (web, client_secret_basic)
---   - core7-api (machine, client_secret_basic)
+-- OAuth2 Clients (web — 3 redirect_uris per app: localhost, bos7.local, dev.ihsansolusi.co.id):
+--   - bos7-portal, workflow7-web, auth7-ui-dev, bos7-template, bos7-enterprise
+--   - bos7-financing, bos7-funding, bos7-treasury, bos7-smt, bos7-accounting
+--   - bos7-cif, bos7-internalaccount, bos7-remittance, bos7-batchprocessing
+-- OAuth2 Clients (machine / native):
+--   - core7-api, workflow7-svc, notif7-svc (M2M)
 --   - mobile-app (native, public)
 --
 -- Branches:

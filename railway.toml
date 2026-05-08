@@ -1,0 +1,9 @@
+[build]
+  dockerfilePath = "Dockerfile"
+
+[deploy]
+  startCommand = "./scripts/docker-entrypoint.sh ./auth7 start"
+  healthcheckPath = "/health/live"
+  healthcheckTimeout = 300
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 3
