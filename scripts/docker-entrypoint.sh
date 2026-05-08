@@ -14,4 +14,8 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
   echo "→ Database ready."
 fi
 
+echo "→ Running database migrations..."
+./auth7 migrate up
+echo "→ Migrations done."
+
 exec "$@"

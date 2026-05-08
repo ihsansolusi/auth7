@@ -26,6 +26,7 @@ WORKDIR /app
 
 COPY --from=builder /app/bin/auth7 .
 COPY configs/config.example.yaml configs/config.yaml
+COPY migrations/ migrations/
 COPY scripts/docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN apk --no-cache add ca-certificates postgresql-client && \
