@@ -15,7 +15,10 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
   AUTH7_DB_URL="${DATABASE_ADMIN_URL%/postgres*}/auth7?sslmode=disable"
   psql "$AUTH7_DB_URL" -c "GRANT CREATE ON SCHEMA public TO auth7;" 2>/dev/null || true
   psql "$AUTH7_DB_URL" -c "GRANT USAGE ON SCHEMA public TO auth7;" 2>/dev/null || true
-  # Ensure search_path is set explicitly so FK references resolve correctly
+  # Force search_path to public at both database and role level.
+  # Without this, PostgreSQL 15+ may resolve tables to "$user" schema (auth7)
+  # instead of public, causing FK references to fail across migrations.
+  psql "$AUTH7_DB_URL" -c "ALTER DATABASE auth7 SET search_path TO public;" 2>/dev/null || true
   psql "$AUTH7_DB_URL" -c "ALTER ROLE auth7 SET search_path TO public;" 2>/dev/null || true
   # Fix dirty migration state from any previous failed deploy (enables idempotent redeploys)
   DIRTY=$(psql "$AUTH7_DB_URL" -tAc "SELECT COUNT(*) FROM schema_migrations WHERE dirty=true" 2>/dev/null || echo "0")
