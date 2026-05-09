@@ -11,11 +11,12 @@ COPY go.mod go.sum ./
 COPY vendor/ vendor/
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -mod=vendor \
     -ldflags="-w -s -X main.Version=${VERSION}" \
     -o bin/auth7 \
-    ./cmd/server/
+    ./cmd/server/ \
+    || (go build -mod=vendor ./... 2>&1 | head -40 && exit 1)
 
 # Stage 2: Runtime
 FROM alpine:3.19
