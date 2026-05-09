@@ -6,8 +6,6 @@
 bin/
 *.exe
 
-# Compiled server binary at root (not to be deployed — bin/auth7 is the target)
-server
 
 # Test files
 *_test.go
