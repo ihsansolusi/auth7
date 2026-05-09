@@ -19,5 +19,3 @@ CREATE TABLE branches (
 CREATE INDEX idx_branches_org_id ON branches(org_id);
 CREATE INDEX idx_branches_type ON branches(branch_type_id);
 
--- Down
-DROP TABLE IF EXISTS branches;

@@ -22,5 +22,3 @@ CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_org_id ON sessions(org_id);
 CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
 
--- Down
-DROP TABLE IF EXISTS sessions;

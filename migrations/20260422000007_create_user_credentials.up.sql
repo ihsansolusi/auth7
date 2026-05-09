@@ -22,6 +22,3 @@ CREATE TABLE user_credential_history (
 CREATE INDEX idx_user_credentials_user_id ON user_credentials(user_id);
 CREATE INDEX idx_user_cred_history_user_id ON user_credential_history(user_id);
 
--- Down
-DROP TABLE IF EXISTS user_credentials;
-DROP TABLE IF EXISTS user_credential_history;

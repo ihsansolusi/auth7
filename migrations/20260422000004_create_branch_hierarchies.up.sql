@@ -17,5 +17,3 @@ CREATE INDEX idx_branch_hierarchies_parent ON branch_hierarchies(org_id, parent_
 CREATE INDEX idx_branch_hierarchies_child ON branch_hierarchies(org_id, child_id);
 CREATE INDEX idx_branch_hierarchies_path ON branch_hierarchies(org_id, path);
 
--- Down
-DROP TABLE IF EXISTS branch_hierarchies;

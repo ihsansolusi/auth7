@@ -32,5 +32,3 @@ CREATE INDEX idx_users_email ON users(org_id, email);
 CREATE INDEX idx_users_status ON users(org_id, status);
 CREATE INDEX idx_users_deleted ON users(deleted_at) WHERE deleted_at IS NOT NULL;
 
--- Down
-DROP TABLE IF EXISTS users;

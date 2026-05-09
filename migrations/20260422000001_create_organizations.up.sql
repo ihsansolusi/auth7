@@ -16,5 +16,3 @@ CREATE TABLE organizations (
 COMMENT ON TABLE organizations IS 'Bank/Tenant organization';
 COMMENT ON COLUMN organizations.settings IS 'Org-level config: session_policy, mfa_policy, password_policy, branding';
 
--- Down
-DROP TABLE IF EXISTS organizations;

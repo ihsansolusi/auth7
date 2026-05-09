@@ -15,5 +15,3 @@ CREATE INDEX idx_user_branch_user ON user_branch_assignments(user_id);
 CREATE INDEX idx_user_branch_branch ON user_branch_assignments(branch_id);
 CREATE INDEX idx_user_branch_primary ON user_branch_assignments(user_id) WHERE is_primary = TRUE;
 
--- Down
-DROP TABLE IF EXISTS user_branch_assignments;

@@ -13,5 +13,3 @@ CREATE TABLE user_attributes (
 
 CREATE INDEX idx_user_attrs_user_id ON user_attributes(user_id);
 
--- Down
-DROP TABLE IF EXISTS user_attributes;

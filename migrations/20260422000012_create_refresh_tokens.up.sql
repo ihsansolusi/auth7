@@ -23,5 +23,3 @@ CREATE INDEX idx_refresh_tokens_family ON refresh_tokens(family_id);
 CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at);
 CREATE INDEX idx_refresh_tokens_session ON refresh_tokens(session_id);
 
--- Down
-DROP TABLE IF EXISTS refresh_tokens;

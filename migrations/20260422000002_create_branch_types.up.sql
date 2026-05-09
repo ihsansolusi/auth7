@@ -21,5 +21,3 @@ CREATE INDEX idx_branch_types_level ON branch_types(org_id, level);
 
 COMMENT ON TABLE branch_types IS 'Configurable branch type per organization';
 
--- Down
-DROP TABLE IF EXISTS branch_types;

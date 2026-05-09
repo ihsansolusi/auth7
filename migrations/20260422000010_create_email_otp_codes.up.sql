@@ -15,5 +15,3 @@ CREATE TABLE email_otp_codes (
 CREATE INDEX idx_email_otp_user_id ON email_otp_codes(user_id);
 CREATE INDEX idx_email_otp_expires ON email_otp_codes(expires_at);
 
--- Down
-DROP TABLE IF EXISTS email_otp_codes;
