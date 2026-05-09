@@ -1,6 +1,5 @@
 [build]
   dockerfilePath = "Dockerfile"
-  buildArgs = { GITHUB_TOKEN = "${{ GITHUB_TOKEN }}" }
 
 [deploy]
   startCommand = "./scripts/docker-entrypoint.sh ./auth7 start"
