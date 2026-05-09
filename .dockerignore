@@ -6,8 +6,7 @@
 bin/
 *.exe
 
-# Vendor (not needed — Dockerfile uses go mod download)
-vendor/
+# Compiled server binary at root (not to be deployed — bin/auth7 is the target)
 server
 
 # Test files

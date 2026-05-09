@@ -8,10 +8,11 @@ ARG VERSION=dev
 WORKDIR /app
 
 COPY go.mod go.sum ./
-RUN go mod download
+COPY vendor/ vendor/
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build \
+    -mod=vendor \
     -ldflags="-w -s -X main.Version=${VERSION}" \
     -o bin/auth7 \
     ./cmd/server/
