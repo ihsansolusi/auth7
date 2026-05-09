@@ -3,7 +3,7 @@
 
 CREATE TABLE roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID NOT NULL REFERENCES organizations(id),
+    org_id UUID NOT NULL REFERENCES public.organizations(id),
     code VARCHAR(50) NOT NULL,
     name VARCHAR(100) NOT NULL,
     description TEXT,
@@ -23,18 +23,18 @@ CREATE TABLE permissions (
 );
 
 CREATE TABLE role_permissions (
-    role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
+    permission_id UUID NOT NULL REFERENCES public.permissions(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (role_id, permission_id)
 );
 
 CREATE TABLE user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    org_id UUID NOT NULL REFERENCES organizations(id),
-    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
+    org_id UUID NOT NULL REFERENCES public.organizations(id),
+    branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
     granted_by UUID NOT NULL,
     granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     revoked_at TIMESTAMPTZ,

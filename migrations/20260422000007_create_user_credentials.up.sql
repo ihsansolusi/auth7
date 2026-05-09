@@ -3,7 +3,7 @@
 
 CREATE TABLE user_credentials (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id),
+    user_id         UUID NOT NULL REFERENCES public.users(id),
     credential_type VARCHAR(50) NOT NULL DEFAULT 'password',
     secret_hash     TEXT NOT NULL,
     version         INTEGER NOT NULL DEFAULT 1,
@@ -14,7 +14,7 @@ CREATE TABLE user_credentials (
 
 CREATE TABLE user_credential_history (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users(id),
+    user_id         UUID NOT NULL REFERENCES public.users(id),
     secret_hash     TEXT NOT NULL,
     retired_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

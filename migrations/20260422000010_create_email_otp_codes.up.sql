@@ -3,7 +3,7 @@
 
 CREATE TABLE email_otp_codes (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id),
+    user_id     UUID NOT NULL REFERENCES public.users(id),
     code        VARCHAR(6) NOT NULL,
     purpose     VARCHAR(50) NOT NULL,
     expires_at  TIMESTAMPTZ NOT NULL,

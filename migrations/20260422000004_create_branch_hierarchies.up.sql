@@ -3,9 +3,9 @@
 
 CREATE TABLE branch_hierarchies (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id          UUID NOT NULL REFERENCES organizations(id),
-    parent_id       UUID REFERENCES branches(id),
-    child_id        UUID NOT NULL REFERENCES branches(id),
+    org_id          UUID NOT NULL REFERENCES public.organizations(id),
+    parent_id       UUID REFERENCES public.branches(id),
+    child_id        UUID NOT NULL REFERENCES public.branches(id),
     path            VARCHAR(500) NOT NULL,
     depth           INTEGER NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),

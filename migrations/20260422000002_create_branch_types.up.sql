@@ -3,7 +3,7 @@
 
 CREATE TABLE branch_types (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id          UUID NOT NULL REFERENCES organizations(id),
+    org_id          UUID NOT NULL REFERENCES public.organizations(id),
     code            VARCHAR(50) NOT NULL,
     label           VARCHAR(255) NOT NULL,
     short_code      VARCHAR(10) NOT NULL,

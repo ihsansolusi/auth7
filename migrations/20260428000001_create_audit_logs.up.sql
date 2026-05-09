@@ -3,7 +3,7 @@
 
 CREATE TABLE audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID NOT NULL REFERENCES organizations(id),
+    org_id UUID NOT NULL REFERENCES public.organizations(id),
     actor_id UUID NOT NULL,
     actor_email VARCHAR(255),
     action VARCHAR(100) NOT NULL,

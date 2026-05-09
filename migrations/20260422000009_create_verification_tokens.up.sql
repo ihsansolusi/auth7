@@ -3,7 +3,7 @@
 
 CREATE TABLE verification_tokens (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users(id),
+    user_id     UUID NOT NULL REFERENCES public.users(id),
     token       TEXT NOT NULL UNIQUE,
     token_type  VARCHAR(50) NOT NULL,
     expires_at  TIMESTAMPTZ NOT NULL,

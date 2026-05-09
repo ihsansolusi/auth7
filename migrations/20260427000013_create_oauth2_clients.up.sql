@@ -4,7 +4,7 @@
 CREATE TABLE oauth2_clients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id VARCHAR(128) UNIQUE NOT NULL,
-    org_id UUID NOT NULL REFERENCES organizations(id),
+    org_id UUID NOT NULL REFERENCES public.organizations(id),
     name VARCHAR(256) NOT NULL,
     description TEXT,
     client_type VARCHAR(32) NOT NULL DEFAULT 'web',
@@ -29,11 +29,11 @@ CREATE INDEX idx_oauth2_clients_client_id ON oauth2_clients(client_id);
 CREATE TABLE oauth2_authorization_codes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(64) UNIQUE NOT NULL,
-    client_id VARCHAR(128) NOT NULL REFERENCES oauth2_clients(client_id),
+    client_id VARCHAR(128) NOT NULL REFERENCES public.oauth2_clients(client_id),
     redirect_uri VARCHAR(512) NOT NULL,
     scope TEXT,
-    user_id UUID NOT NULL REFERENCES users(id),
-    org_id UUID NOT NULL REFERENCES organizations(id),
+    user_id UUID NOT NULL REFERENCES public.users(id),
+    org_id UUID NOT NULL REFERENCES public.organizations(id),
     code_challenge VARCHAR(128),
     code_challenge_method VARCHAR(8),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,

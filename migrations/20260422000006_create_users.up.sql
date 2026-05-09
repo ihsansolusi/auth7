@@ -3,7 +3,7 @@
 
 CREATE TABLE users (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id                  UUID NOT NULL REFERENCES organizations(id),
+    org_id                  UUID NOT NULL REFERENCES public.organizations(id),
     username                VARCHAR(100) NOT NULL,
     email                   VARCHAR(255) NOT NULL,
     full_name               VARCHAR(255) NOT NULL,

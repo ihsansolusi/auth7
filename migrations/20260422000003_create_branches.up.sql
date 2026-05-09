@@ -3,8 +3,8 @@
 
 CREATE TABLE branches (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id          UUID NOT NULL REFERENCES organizations(id),
-    branch_type_id  UUID NOT NULL REFERENCES branch_types(id),
+    org_id          UUID NOT NULL REFERENCES public.organizations(id),
+    branch_type_id  UUID NOT NULL REFERENCES public.branch_types(id),
     code            VARCHAR(20) NOT NULL,
     name            VARCHAR(255) NOT NULL,
     status          VARCHAR(50) NOT NULL DEFAULT 'active',

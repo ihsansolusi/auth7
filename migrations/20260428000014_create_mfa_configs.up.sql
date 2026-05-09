@@ -3,7 +3,7 @@
 
 CREATE TABLE mfa_configs (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                  UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id                  UUID UNIQUE NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     totp_secret_encrypted    BYTEA,
     totp_secret_iv          BYTEA,
     is_totp_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
