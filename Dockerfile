@@ -4,19 +4,27 @@
 FROM golang:1.26-alpine AS builder
 
 ARG VERSION=dev
+ARG GITHUB_TOKEN
 
 WORKDIR /app
 
+RUN apk add --no-cache git ca-certificates
+
+# Authenticate to GitHub for private module download
+RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
 COPY go.mod go.sum ./
-COPY vendor/ vendor/
+RUN GONOSUMDB="github.com/ihsansolusi" GOPRIVATE="github.com/ihsansolusi/*" go mod download
+
+# Clear token from git config (not baked into image)
+RUN git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf 2>/dev/null || true
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -mod=vendor \
     -ldflags="-w -s -X main.Version=${VERSION}" \
     -o bin/auth7 \
     ./cmd/server/ \
-    || (go build -mod=vendor ./... 2>&1 | head -40 && exit 1)
+    || (go build ./... 2>&1 | head -40 && exit 1)
 
 # Stage 2: Runtime
 FROM alpine:3.19

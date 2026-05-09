@@ -14,6 +14,9 @@ configs/config.yaml
 coverage.out
 coverage.html
 
+# Go module vendor (not needed — uses go mod download with GITHUB_TOKEN)
+vendor/
+
 # Build artifacts
 *.test
 *.out

@@ -7,7 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/ihsansolusi/lib7-service-go v0.2.0
+	github.com/ihsansolusi/lib7-service-go v0.2.2
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/nats-io/nats.go v1.51.0
 	github.com/pquerna/otp v1.4.0
@@ -111,5 +111,3 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/ihsansolusi/lib7-service-go => /home/galih/Works/projects/banks/core7-devroot/libs/service-go
