@@ -1,0 +1,38 @@
+# Git
+.git/
+.gitignore
+
+# Go build artifacts
+bin/
+*.exe
+
+# Test files
+*_test.go
+tests/
+testdata/
+
+# Development configs
+.env
+.env.local
+.env.*
+!.env.example
+
+# CI/CD
+.github/
+
+# Documentation
+docs/
+*.md
+README*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

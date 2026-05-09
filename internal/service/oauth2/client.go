@@ -33,6 +33,7 @@ type DCRStore interface {
 	UpdateClient(ctx context.Context, client *domain.Client) error
 	GetClient(ctx context.Context, clientID string) (*domain.Client, error)
 	DeleteClient(ctx context.Context, clientID string) error
+	ListApps(ctx context.Context) ([]*domain.AppEntry, error)
 }
 
 type ClientService struct {
@@ -151,6 +152,10 @@ type CreateClientParams struct {
 	RefreshTokenExpiration   int
 	AllowMultipleTokens      bool
 	SkipConsentScreen        bool
+}
+
+func (s *ClientService) ListApps(ctx context.Context) ([]*domain.AppEntry, error) {
+	return s.store.ListApps(ctx)
 }
 
 func generateClientSecret() (string, error) {

@@ -47,7 +47,7 @@ echo "→ Migrations done."
 
 if [ -n "$DATABASE_ADMIN_URL" ] && [ -f scripts/seed-data.sql ]; then
   echo "→ Seeding initial data..."
-  psql "${DATABASE_ADMIN_URL%/postgres*}/auth7?sslmode=disable" -f scripts/seed-data.sql 2>&1 | tail -5 || true
+  psql "${DATABASE_ADMIN_URL%/postgres*}/auth7?sslmode=disable" -f scripts/seed-data.sql 2>&1 || true
   echo "→ Seed done."
 fi
 

@@ -1,7 +1,7 @@
--- Migration: Create MFA tables (mfa_configs and update email_otp_codes)
--- Up
+-- Migration: Recreate mfa_configs if dropped by buggy migration 14
+-- Safe to run even if table already exists (uses IF NOT EXISTS)
 
-CREATE TABLE mfa_configs (
+CREATE TABLE IF NOT EXISTS mfa_configs (
     id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id                  UUID UNIQUE NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     totp_secret_encrypted    BYTEA,
@@ -15,9 +15,8 @@ CREATE TABLE mfa_configs (
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_mfa_configs_user_id ON mfa_configs(user_id);
+CREATE INDEX IF NOT EXISTS idx_mfa_configs_user_id ON mfa_configs(user_id);
 
--- Add columns to email_otp_codes if they don't exist (for existing installations)
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_otp_codes' AND column_name = 'code_hash') THEN
@@ -25,6 +24,5 @@ BEGIN
     END IF;
 END $$;
 
-CREATE INDEX idx_email_otp_codes_user_id ON email_otp_codes(user_id);
-CREATE INDEX idx_email_otp_codes_expires ON email_otp_codes(expires_at);
-
+CREATE INDEX IF NOT EXISTS idx_email_otp_codes_user_id ON email_otp_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_otp_codes_expires ON email_otp_codes(expires_at);

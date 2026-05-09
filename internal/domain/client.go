@@ -36,9 +36,13 @@ const (
 
 type Client struct {
 	ID                       uuid.UUID                `json:"id"`
+	ClientID                 string                   `json:"client_id"`
 	OrgID                    uuid.UUID                `json:"org_id"`
 	Name                     string                   `json:"name"`
 	Description              string                   `json:"description"`
+	AppURL                   string                   `json:"app_url,omitempty"`
+	IconName                 string                   `json:"icon_name,omitempty"`
+	IconColor                string                   `json:"icon_color,omitempty"`
 	ClientType               ClientType               `json:"client_type"`
 	TokenEndpointAuthMethod  TokenEndpointAuthMethod  `json:"token_endpoint_auth_method"`
 	AllowedScopes            []string                 `json:"allowed_scopes"`
@@ -53,6 +57,16 @@ type Client struct {
 	IsActive                 bool                     `json:"is_active"`
 	CreatedAt                time.Time                `json:"created_at"`
 	UpdatedAt                time.Time                `json:"updated_at"`
+}
+
+// AppEntry is a public-facing app catalog entry derived from oauth2_clients.
+type AppEntry struct {
+	ClientID    string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AppURL      string `json:"url"`
+	IconName    string `json:"icon_name,omitempty"`
+	IconColor   string `json:"icon_color,omitempty"`
 }
 
 func (c *Client) IsConfidential() bool {

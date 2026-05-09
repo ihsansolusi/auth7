@@ -81,6 +81,8 @@ func (s *Server) RegisterRoutes(r *gin.Engine, deps ServerDeps) {
 	s.RegisterOAuth2Routes(r)
 	s.RegisterBranchRoutes(r)
 
+	r.GET("/v1/apps", s.handleListApps)
+
 	admin := r.Group("/admin")
 	admin.Use(middleware.NewRateLimiter(nil).AdminLimit())
 	{

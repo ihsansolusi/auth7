@@ -16,6 +16,7 @@ const (
 	opOAuth2ClientUpdate   = "postgres.OAuth2ClientRepository.UpdateClient"
 	opOAuth2ClientGet      = "postgres.OAuth2ClientRepository.GetClient"
 	opOAuth2ClientDelete   = "postgres.OAuth2ClientRepository.DeleteClient"
+	opOAuth2ClientListApps = "postgres.OAuth2ClientRepository.ListApps"
 	opOAuth2AuthCodeCreate = "postgres.OAuth2AuthCodeRepository.Create"
 	opOAuth2AuthCodeGet    = "postgres.OAuth2AuthCodeRepository.GetByCode"
 	opOAuth2AuthCodeMark   = "postgres.OAuth2AuthCodeRepository.MarkUsed"
@@ -110,7 +111,10 @@ func (r *OAuth2ClientRepository) GetClient(ctx context.Context, clientID string)
 		       allowed_scopes, allowed_redirect_uris, allowed_origins,
 		       client_secret_hash, token_expiration, refresh_token_expiration,
 		       allow_multiple_tokens, skip_consent_screen, is_active,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       COALESCE(app_url, '') AS app_url,
+		       COALESCE(icon_name, '') AS icon_name,
+		       COALESCE(icon_color, '') AS icon_color
 		FROM oauth2_clients
 		WHERE client_id = $1`
 
@@ -127,10 +131,12 @@ func (r *OAuth2ClientRepository) GetClient(ctx context.Context, clientID string)
 		&clientSecretHash, &c.TokenExpiration, &c.RefreshTokenExpiration,
 		&c.AllowMultipleTokens, &c.SkipConsentScreen, &c.IsActive,
 		&c.CreatedAt, &c.UpdatedAt,
+		&c.AppURL, &c.IconName, &c.IconColor,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
+	c.ClientID = clientIDStr
 	if description != nil {
 		c.Description = *description
 	}
@@ -140,6 +146,37 @@ func (r *OAuth2ClientRepository) GetClient(ctx context.Context, clientID string)
 	c.ClientType = domain.ClientType(clientTypeStr)
 	c.TokenEndpointAuthMethod = domain.TokenEndpointAuthMethod(authMethodStr)
 	return c, nil
+}
+
+func (r *OAuth2ClientRepository) ListApps(ctx context.Context) ([]*domain.AppEntry, error) {
+	const op = opOAuth2ClientListApps
+	query := `
+		SELECT client_id, name,
+		       COALESCE(description, '') AS description,
+		       COALESCE(app_url, '')    AS app_url,
+		       COALESCE(icon_name, '')  AS icon_name,
+		       COALESCE(icon_color, '') AS icon_color
+		FROM oauth2_clients
+		WHERE is_active = true
+		  AND client_type IN ('web', 'spa')
+		  AND app_url IS NOT NULL AND app_url <> ''
+		ORDER BY name`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var apps []*domain.AppEntry
+	for rows.Next() {
+		a := &domain.AppEntry{}
+		if err := rows.Scan(&a.ClientID, &a.Name, &a.Description, &a.AppURL, &a.IconName, &a.IconColor); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		apps = append(apps, a)
+	}
+	return apps, rows.Err()
 }
 
 func (r *OAuth2ClientRepository) DeleteClient(ctx context.Context, clientID string) error {
