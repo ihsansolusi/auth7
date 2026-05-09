@@ -20,6 +20,7 @@ RUN GONOSUMDB="github.com/ihsansolusi" GOPRIVATE="github.com/ihsansolusi/*" go m
 RUN git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf 2>/dev/null || true
 
 COPY . .
+RUN echo "=== /app contents ===" && ls -la /app && echo "=== cmd/ ===" && ls -la /app/cmd || true && echo "=== cmd/server/ ===" && ls /app/cmd/server || true
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -X main.Version=${VERSION}" \
     -o bin/auth7 \
