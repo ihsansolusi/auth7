@@ -6,6 +6,10 @@
 bin/
 *.exe
 
+# Vendor (not needed — Dockerfile uses go mod download)
+vendor/
+server
+
 # Test files
 *_test.go
 tests/
