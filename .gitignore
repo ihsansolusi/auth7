@@ -1,8 +1,8 @@
 # Binaries
 bin/
 tmp/
-auth7-bin
-server
+/auth7-bin
+/server
 
 # Config dengan secrets
 .env
