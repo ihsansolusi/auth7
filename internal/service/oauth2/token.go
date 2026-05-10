@@ -64,6 +64,14 @@ func (s *TokenService) ExchangeCodeForTokens(ctx context.Context, code, codeVeri
 		return nil, fmt.Errorf("%s: %w", opTokenExchange, err)
 	}
 
+	// Store session in Redis so RevokeAllUserSessions can find and blacklist it.
+	type sessionStorer interface {
+		StoreSession(ctx context.Context, sessionID, userID, orgID string) error
+	}
+	if ss, ok := s.sessionSvc.(sessionStorer); ok {
+		_ = ss.StoreSession(ctx, sessionID, authCode.UserID.String(), authCode.OrgID.String())
+	}
+
 	refreshToken := jwt.GenerateRefreshToken()
 
 	return &TokenResponse{

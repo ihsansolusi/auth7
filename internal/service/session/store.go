@@ -221,6 +221,33 @@ func (s *Store) ExtendTTL(ctx context.Context, sessionID string, extension time.
 	return s.redis.Set(ctx, s.sessionKey(sessionID), jsonData, extension).Err()
 }
 
+func (s *Store) GetIDsByUser(ctx context.Context, userID string) ([]string, error) {
+	const op = "session.Store.GetIDsByUser"
+
+	var ids []string
+	iter := s.redis.Scan(ctx, 0, "session:*", 100).Iterator()
+
+	for iter.Next(ctx) {
+		data, err := s.redis.Get(ctx, iter.Val()).Bytes()
+		if err != nil {
+			continue
+		}
+		var session SessionData
+		if err := json.Unmarshal(data, &session); err != nil {
+			continue
+		}
+		if session.UserID == userID {
+			ids = append(ids, session.ID)
+		}
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	return ids, nil
+}
+
 func (s *Store) DeleteByOrg(ctx context.Context, orgID string) error {
 	const op = "session.Store.DeleteByOrg"
 

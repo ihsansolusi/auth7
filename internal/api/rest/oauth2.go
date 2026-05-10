@@ -410,6 +410,14 @@ func (s *Server) handleUserInfo(c *gin.Context) {
 		return
 	}
 
+	// Check session blacklist before returning userinfo (SSO logout propagation)
+	if sessionSvc, ok := s.deps.SessionSvc.(*session.Service); ok && sessionSvc != nil {
+		if _, err := sessionSvc.VerifyAccessToken(c.Request.Context(), tokenStr); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_token"})
+			return
+		}
+	}
+
 	type jwtVerifier interface {
 		VerifyAccessToken(string) (interface{}, error)
 	}

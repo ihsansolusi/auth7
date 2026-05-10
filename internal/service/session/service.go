@@ -225,8 +225,13 @@ func (s *Service) RevokeSession(ctx context.Context, sessionID string) error {
 func (s *Service) RevokeAllUserSessions(ctx context.Context, userID string) error {
 	const op = "session.Service.RevokeAllUserSessions"
 
-	if err := s.sessionStore.DeleteByUser(ctx, userID); err != nil {
-		return fmt.Errorf("%s: delete user sessions: %w", op, err)
+	ids, err := s.sessionStore.GetIDsByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("%s: get session IDs: %w", op, err)
+	}
+
+	for _, id := range ids {
+		_ = s.RevokeSession(ctx, id)
 	}
 
 	return nil
@@ -244,6 +249,16 @@ func (s *Service) RevokeAllOrgSessions(ctx context.Context, orgID string) error 
 
 func (s *Service) GetSession(ctx context.Context, sessionID string) (*SessionData, error) {
 	return s.sessionStore.Get(ctx, sessionID)
+}
+
+// StoreSession persists a minimal session entry so it can be found and revoked by RevokeAllUserSessions.
+// Used by PKCE token exchange where no full login flow occurs.
+func (s *Service) StoreSession(ctx context.Context, sessionID, userID, orgID string) error {
+	return s.sessionStore.Create(ctx, &SessionData{
+		ID:     sessionID,
+		UserID: userID,
+		OrgID:  orgID,
+	})
 }
 
 func (s *Service) VerifyAccessToken(ctx context.Context, accessToken string) (*jwt.Claims, error) {

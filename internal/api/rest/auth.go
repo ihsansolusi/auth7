@@ -322,9 +322,12 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 		return
 	}
 
-	if err := h.sessionSvc.RevokeSession(c.Request.Context(), claims.SessionID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout"})
-		return
+	if err := h.sessionSvc.RevokeAllUserSessions(c.Request.Context(), claims.Subject); err != nil {
+		// Fallback: revoke at least the current session
+		if revokeErr := h.sessionSvc.RevokeSession(c.Request.Context(), claims.SessionID); revokeErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout"})
+			return
+		}
 	}
 
 	if h.eventPub != nil {
