@@ -18,10 +18,10 @@ import (
 // adminClaims wraps jwtpkg.Claims to expose simple getter methods expected by AdminAuth middleware.
 type adminClaims struct{ *jwtpkg.Claims }
 
-func (c *adminClaims) GetSubject() string  { return c.Claims.RegisteredClaims.Subject }
-func (c *adminClaims) GetOrgID() string    { return c.Claims.OrgID }
-func (c *adminClaims) GetRoles() []string  { return c.Claims.Roles }
-func (c *adminClaims) GetEmail() string    { return c.Claims.Email }
+func (c *adminClaims) GetSubject() string { return c.Claims.RegisteredClaims.Subject }
+func (c *adminClaims) GetOrgID() string   { return c.Claims.OrgID }
+func (c *adminClaims) GetRoles() []string { return c.Claims.Roles }
+func (c *adminClaims) GetEmail() string   { return c.Claims.Email }
 
 // RegisterAdminV1Routes wires admin handlers under /admin/v1 with JWT + role enforcement.
 func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
@@ -61,6 +61,7 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 
 	adminpkg.NewUserHandler(newAdminUserSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewRoleHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
+	adminpkg.NewFacadeHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	// UserRoleHandler excluded: its /users/:user_id/* path conflicts with UserHandler's /users/:id/*
 	adminpkg.NewAuditHandler(auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 
