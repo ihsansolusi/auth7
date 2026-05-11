@@ -55,6 +55,20 @@ Compatibility rules:
 2. hasil translasi harus berujung ke objek `role` dan `permission` milik auth7.
 3. jika satu artifact legacy ambigu, mapping dicatat sebagai `compatibility-only` sampai ada keputusan lintas stream.
 
+### 1.2 Deprecation Marker for Compatibility Paths (Wave 4)
+
+Path compatibility untuk role/menu/function dipertahankan hanya untuk fase transisi.
+Path ini harus diberi marker deprecation agar consumer facade tidak memperlakukannya sebagai kontrak permanen.
+
+Compatibility path semantics:
+- `/admin/v1/facade/compatibility/role-menu-mappings`
+- `/admin/v1/facade/compatibility/function-permission-mappings`
+
+Deprecation requirements:
+- response menyertakan marker deprecation + sunset metadata
+- response menyertakan `steady_state_target = auth7_role_permission_model`
+- consumer wajib migrasi ke permission runtime auth7 (`menu:{menu_key}:access`, `{resource}:{action}`)
+
 ---
 
 ## 2. Authorization Layers

@@ -4,6 +4,8 @@
 > **Umbrella**: `core7-devroot#200`  
 > **Wave Coordinator (W1)**: `core7-devroot#202`  
 > **Wave Coordinator (W2)**: `core7-devroot#203`  
+> **Wave Coordinator (W3)**: `core7-devroot#204`  
+> **Wave Coordinator (W4)**: `core7-devroot#205`  
 > **Stream Epic**: `auth7#114`  
 > **Depends on**: Plans 05, 07, 08, 10, 11  
 > **Reference**:
@@ -111,6 +113,58 @@ Dependency lintas stream yang harus tersedia sebelum masuk `Wave 3` wiring:
 Status `Wave 2`:
 - auth7 mendefinisikan consumer contract dan mapping baseline di level spec
 - unresolved lintas stream harus dicatat di coordinator `core7-devroot#203` sebagai dependency, bukan diresolusikan unilateral oleh auth7
+
+## Wave 4 Scope
+
+Plan ini menurunkan `Plan 12 Wave 4` untuk stream `auth7`. Fokus wave ini adalah
+compatibility cleanup: inventaris artifact legacy IAM, deprecation marker, serta cutover conditions dan blocker list.
+
+Deliverable inti `Wave 4`:
+- inventaris artifact compatibility user/role/menu/function dengan status eksplisit
+- marker deprecation pada compatibility path role/menu mapping
+- target steady-state auth7 role/permission model yang eksplisit
+- cutover conditions + blocker list untuk compatibility layer
+
+## Wave 4 Issue Set
+
+| Issue | Fokus | Target Artefak |
+|---|---|---|
+| `auth7#125` | Inventory compatibility artifacts + status | plan, integration/authorization spec |
+| `auth7#126` | Deprecation markers for compatibility role/menu mapping | runtime facade endpoint + spec |
+| `auth7#127` | Cutover conditions and blockers definition | plan + dependency notes |
+
+## Compatibility Artifact Register (Wave 4)
+
+| Artifact | Domain | Status | Runtime Authority Allowed | Target Steady-State |
+|---|---|---|---|---|
+| `legacy_user_id` mapping | user | `facade` | no | user lifecycle full via auth7 users + audit lineage reference |
+| `enterprise.peran` | role | `compatibility-only` | no | auth7 `roles` as single runtime authority |
+| `enterprise.listperanuser` | user-role binding | `compatibility-only` | no | auth7 `user_roles` scoped by org/branch |
+| `enterprise.rolemenulist` | menu visibility mapping | `compatibility-only` | no | auth7 permission `menu:{menu_key}:access` |
+| `enterprise.usermenulist` | user menu override | `retire-target` | no | role-based menu permission + explicit exception policy in auth7 |
+| legacy function/action map | function grant mapping | `compatibility-only` | no | auth7 permission `{resource}:{action}` |
+
+Guardrail wajib:
+- tidak ada artifact legacy di atas yang boleh menjadi runtime authority IAM.
+- semua keputusan allow/deny runtime harus berasal dari role/permission auth7.
+
+## Cutover Conditions and Blockers (Wave 4)
+
+### Cutover Conditions
+
+1. Semua operasi Access Management di `bos7-enterprise` membaca/menulis ke admin/facade endpoints auth7.
+2. Tidak ada write path aktif ke artifact legacy role/menu/function sebagai authority runtime.
+3. Metrik parity minimum tercapai untuk role-menu-permission translation (sampling/uji kasus disepakati lintas stream).
+4. Audit event admin dari facade selalu punya `correlation_id` untuk trace lintas modul.
+
+### Blockers
+
+| Blocker ID | Stream Owner | Deskripsi | Dampak |
+|---|---|---|---|
+| `W4-S1-B01` | `S5` (`bos7-enterprise`) | facade wiring belum penuh ke auth7 compatibility endpoints | cutover belum bisa final |
+| `W4-S1-B02` | `S3` (`core7-service-enterprise`) | sumber mapping legacy role/menu/function belum freeze | risiko drift translation |
+| `W4-S1-B03` | `S5` + coordinator | belum ada agreed test matrix parity role/menu/function | retire-target belum aman |
+| `W4-S1-B04` | coordinator | belum ada tanggal sunset lintas stream untuk compatibility paths | deprecation tidak enforceable |
 
 ---
 

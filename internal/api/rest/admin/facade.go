@@ -55,6 +55,8 @@ func (h *FacadeHandler) RegisterRoutes(r *gin.RouterGroup) {
 		facade.GET("/access/users", h.handleAccessUsers)
 		facade.GET("/access/roles", h.handleAccessRoles)
 		facade.GET("/access/permissions", h.handleAccessPermissions)
+		facade.GET("/compatibility/role-menu-mappings", h.handleCompatibilityRoleMenuMappings)
+		facade.GET("/compatibility/function-permission-mappings", h.handleCompatibilityFunctionPermissionMappings)
 		facade.GET("/error-catalog", h.handleErrorCatalog)
 		facade.POST("/audit-hooks/admin-actions", h.handleAdminAuditHook)
 	}
@@ -231,6 +233,52 @@ func (h *FacadeHandler) handleErrorCatalog(c *gin.Context) {
 	})
 }
 
+func (h *FacadeHandler) handleCompatibilityRoleMenuMappings(c *gin.Context) {
+	h.setDeprecationHeaders(c)
+
+	h.writeSuccess(c, gin.H{
+		"status":              "compatibility-only",
+		"steady_state_target": "auth7_role_permission_model",
+		"mappings": []gin.H{
+			{
+				"legacy_artifact":          "enterprise.rolemenulist",
+				"legacy_semantic":          "role -> menu visibility",
+				"target_permission_format": "menu:{menu_key}:access",
+			},
+			{
+				"legacy_artifact":          "enterprise.usermenulist",
+				"legacy_semantic":          "user menu override",
+				"target_permission_format": "menu:{menu_key}:access (exception policy explicit)",
+			},
+		},
+	}, gin.H{
+		"deprecation": "true",
+	})
+}
+
+func (h *FacadeHandler) handleCompatibilityFunctionPermissionMappings(c *gin.Context) {
+	h.setDeprecationHeaders(c)
+
+	h.writeSuccess(c, gin.H{
+		"status":              "compatibility-only",
+		"steady_state_target": "auth7_role_permission_model",
+		"mappings": []gin.H{
+			{
+				"legacy_artifact":          "legacy function/action map",
+				"legacy_semantic":          "module operation grant",
+				"target_permission_format": "{resource}:{action}",
+			},
+			{
+				"legacy_artifact":          "enterprise.peran + enterprise.listperanuser",
+				"legacy_semantic":          "role definition + user-role binding",
+				"target_permission_format": "roles + user_roles + role_permissions",
+			},
+		},
+	}, gin.H{
+		"deprecation": "true",
+	})
+}
+
 func (h *FacadeHandler) handleAdminAuditHook(c *gin.Context) {
 	var input struct {
 		OrgID         string      `json:"org_id"`
@@ -323,6 +371,12 @@ func (h *FacadeHandler) writeMappedError(c *gin.Context, err error) {
 		h.logger.Error().Err(err).Msg("facade endpoint failed")
 		h.writeCatalogError(c, facadeErrorCatalog[5], nil)
 	}
+}
+
+func (h *FacadeHandler) setDeprecationHeaders(c *gin.Context) {
+	c.Header("Deprecation", "true")
+	c.Header("Sunset", "Wed, 31 Dec 2026 23:59:59 GMT")
+	c.Header("Link", `</admin/v1/facade/access/permissions>; rel="successor-version"`)
 }
 
 func tableExists(ctx context.Context, pool *pgxpool.Pool, tableName string) bool {
