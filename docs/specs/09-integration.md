@@ -14,6 +14,9 @@ Auth7 terintegrasi dengan Core7 ecosystem melalui tiga mekanisme:
 | **gRPC AuthCheck** | Permission check real-time | 1-5ms | Moderate |
 | **Token Introspection** (HTTP) | Verifikasi detail token aktif | 5-10ms | Moderate |
 
+Boundary referensi:
+- [`docs/architecture/auth7-policy7-enterprise-boundary.md`](../../../../docs/architecture/auth7-policy7-enterprise-boundary.md)
+
 ---
 
 ## 2. JWT Verification (Stateless — Recommended)
@@ -285,7 +288,24 @@ _ = notif7Client.Send(ctx, notif7client.Event{
 | `auth.mfa_reset` | in_app + email |
 | `auth.password_changed` | in_app only |
 
-### 4.3 bos7-portal / bos7-template (Next.js)
+### 4.3 bos7-enterprise (Admin UI Aggregator)
+
+`bos7-enterprise` adalah consumer UI utama untuk admin API auth7.
+
+```
+Admin Flow:
+1. Admin buka workspace Access Management di bos7-enterprise
+2. bos7-enterprise memanggil /admin/v1/* di auth7
+3. auth7 mengeksekusi lifecycle IAM: user, role, permission, branch assignment, OAuth client
+4. Jika operasi butuh referensi branch/employee, auth7 memakai projection atau mapping dari core7-service-enterprise
+```
+
+Prinsip:
+- `bos7-enterprise` adalah UI utama
+- auth7 tetap backend owner
+- auth7-ui bukan admin console utama untuk operasi ini
+
+### 4.4 bos7-portal / bos7-template (Next.js)
 
 ```
 Browser Flow:
@@ -304,7 +324,19 @@ SDK yang dipakai:
   - Atau: auth7 menyediakan official Next.js integration package (future)
 ```
 
-### 4.4 service7-template
+### 4.5 core7-service-enterprise
+
+```
+Enterprise master integration:
+1. core7-service-enterprise owns branch master, hierarchy, employee, department, position, office
+2. auth7 consumes branch/employee references untuk access context
+3. branch projection di auth7 harus punya mapping ke branch master enterprise
+4. employee linkage di auth7 disimpan via user_attributes atau reference mapping
+```
+
+Auth7 tidak mengambil alih master data enterprise; auth7 hanya memakai data yang diperlukan untuk identity dan authorization context.
+
+### 4.6 service7-template
 
 ```
 Penggunaan di service template:

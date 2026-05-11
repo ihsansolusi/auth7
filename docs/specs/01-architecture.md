@@ -308,9 +308,13 @@ docker-compose.yml:
 
 | Domain | Target | Deskripsi |
 |---|---|---|
-| `auth.bank.co.id` | auth7-ui (Next.js) | Login, recovery, admin UI |
+| `auth.bank.co.id` | auth7-ui (Next.js) | Login, recovery, MFA, dan auth self-service UX |
 | `auth7.bank.co.id` | auth7-svc (Go API) | REST + gRPC API |
-| `*.bank.co.id` | Aplikasi lain | bos7-portal, workflow7-web, dll |
+| `*.bank.co.id` | Aplikasi lain | `bos7-enterprise`, workflow7-web, dll |
+
+Catatan boundary:
+- `auth7-ui` bukan admin console utama Core7
+- admin operations IAM utamanya dikonsumsi `bos7-enterprise` melalui admin API `auth7`
 
 ### 4.5 Environment Variables
 

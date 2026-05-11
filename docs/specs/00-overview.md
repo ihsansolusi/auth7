@@ -36,6 +36,18 @@ Opsi yang sudah dipertimbangkan:
 > otorisasi fine-grained berbasis roles dan relasi, serta audit trail yang comply
 > dengan regulasi perbankan Indonesia.
 
+### 2.1 Boundary Alignment dengan Enterprise & Policy7
+
+Dokumen boundary lintas-modul yang berlaku untuk auth7 adalah:
+- [`docs/architecture/auth7-policy7-enterprise-boundary.md`](../../../../docs/architecture/auth7-policy7-enterprise-boundary.md)
+
+Keputusan boundary yang dikunci:
+- `auth7` adalah source of truth untuk identity, credential, session, role, permission, dan authz decision.
+- `policy7` adalah source of truth untuk policy dan parameter bisnis yang dipakai auth7 sebagai input ABAC.
+- `core7-service-enterprise` adalah source of truth untuk branch master operasional, employee, department, position, dan office.
+- `bos7-enterprise` adalah admin UI utama untuk operasi admin auth7.
+- `auth7-ui` tetap auth-facing frontend dan bukan admin console utama Core7.
+
 ---
 
 ## 3. Komponen Utama
@@ -163,6 +175,10 @@ Head Office (level 0) → Branch (level 1)
 - Hierarki parent-child disimpan di `branch_hierarchies` (menggunakan `path` traversal)
 - Setiap request auth di-scope ke `org_id` dan `active_branch_id`
 - Hierarki parent-child disimpan di `branch_hierarchies` (menggunakan `path` traversal)
+
+**Boundary note**:
+- branch di auth7 adalah **auth projection** dari branch master enterprise, bukan owner data operasional cabang
+- employee dan struktur organisasi enterprise tidak dimodelkan sebagai domain owner di auth7; auth7 hanya menyimpan referensi/attribute yang diperlukan untuk access context
 
 ### 5.5 Standards Compliant
 - **OAuth 2.0**: RFC 6749, RFC 7636 (PKCE), RFC 7009 (Token Revocation), RFC 7591 (DCR)

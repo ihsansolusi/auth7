@@ -13,6 +13,22 @@
 - No cascade delete di application level (hanya FK constraint)
 - Naming: `snake_case`, nama tabel plural
 
+### 1.1 Boundary Ownership
+
+Boundary referensi:
+- [`docs/architecture/auth7-policy7-enterprise-boundary.md`](../../../../docs/architecture/auth7-policy7-enterprise-boundary.md)
+
+Keputusan yang mengikat data model auth7:
+- auth7 hanya memodelkan domain IAM
+- auth7 tidak menambah tabel source-of-truth untuk policy bisnis
+- auth7 tidak menjadi owner employee/department/position/office
+- branch dan branch hierarchy di auth7 adalah projection auth untuk access scope, bukan owner branch operasional
+- referensi ke employee atau data organisasi enterprise disimpan sebagai attribute/reference, bukan domain master baru
+
+### 1.2 Policy7 Consumption
+
+ABAC di auth7 boleh memakai data dari `policy7`, tetapi data tersebut tidak dimaterialisasi menjadi tabel business-policy owner di schema auth7. Jika caching lokal diperlukan, caching dianggap mekanisme runtime, bukan source of truth schema.
+
 ---
 
 ## 2. Core Tables
@@ -93,6 +109,8 @@ CREATE INDEX idx_branch_types_level ON branch_types(org_id, level);
 
 ### 2.3 `branches` — Kantor/Cabang Bank
 
+> **Boundary note**: tabel `branches` di auth7 adalah auth projection yang dipakai untuk branch assignment, active branch, dan authorization scope. Master branch operasional tetap dimiliki `core7-service-enterprise`.
+
 ```sql
 CREATE TABLE branches (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -113,6 +131,8 @@ CREATE INDEX idx_branches_type ON branches(branch_type_id);
 ```
 
 ### 2.4 `branch_hierarchies` — Hierarki Kantor
+
+> **Boundary note**: hierarki di auth7 adalah projection untuk kebutuhan auth scope dan tree traversal auth, bukan owner struktur organisasi operasional.
 
 Hierarki disimpan terpisah dari branch_type, memungkinkan struktur tree yang fleksibel:
 
@@ -256,6 +276,14 @@ CREATE INDEX idx_user_cred_history_user_id ON user_credential_history(user_id);
 ```
 
 ### 2.8 `user_attributes` — Extensible User Metadata
+
+`user_attributes` dipakai untuk menyimpan referensi identity ke domain enterprise seperti:
+- `employee_id`
+- `department_code`
+- `position_code`
+- `branch_code`
+
+Attribute tersebut adalah compatibility/integration reference ke `core7-service-enterprise`, bukan source of truth baru di auth7.
 
 ```sql
 CREATE TABLE user_attributes (

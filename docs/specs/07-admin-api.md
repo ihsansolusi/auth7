@@ -11,6 +11,13 @@ Admin API digunakan oleh:
 - **org_admin** — access dalam satu org
 - **branch_admin** — access terbatas dalam satu cabang
 
+Admin API auth7 adalah **backend authority** untuk domain IAM. Consumer UI utamanya adalah:
+- `bos7-enterprise` sebagai admin UI utama lintas Core7
+- `auth7-ui` hanya sebagai fallback/internal admin surface yang non-primary
+
+Boundary referensi:
+- [`docs/architecture/auth7-policy7-enterprise-boundary.md`](../../../../docs/architecture/auth7-policy7-enterprise-boundary.md)
+
 Semua admin endpoints di-prefix `/admin/v1/` dan memerlukan:
 1. Valid access token dengan scope `admin:*` atau lebih spesifik
 2. Role yang sesuai (enforced via RBAC)
@@ -25,6 +32,22 @@ Semua admin endpoints di-prefix `/admin/v1/` dan memerlukan:
 - Semua admin API endpoint dilindungi oleh RBAC
 - Request harus punya role admin yang sesuai
 - Audit log mencatat semua admin actions
+
+### 1.3 Ownership Guardrails
+
+Admin API `auth7` hanya authoritative untuk lifecycle IAM, termasuk:
+- user identity lifecycle
+- branch assignment untuk access scope
+- role dan permission lifecycle
+- OAuth client management
+
+Admin API ini tidak mengambil alih:
+- branch master operasional
+- employee/department/position/office master
+- policy dan parameter bisnis milik `policy7`
+
+Jika admin flow membutuhkan policy input, auth7 hanya consume hasil/parameter dari `policy7`
+sesuai kebutuhan authorization runtime; admin CRUD policy tetap di backend `policy7`.
 
 ---
 
@@ -110,6 +133,7 @@ Response:
 - Return user object (tanpa password)
 - Minimal 1 branch assignment dengan `is_primary: true`
 - Role assignments opsional (bisa ditambahkan nanti)
+- `branch_id` yang dipakai pada request adalah branch projection auth7 yang harus punya mapping eksplisit ke branch master `core7-service-enterprise`
 
 ### 2.3 Update User
 
@@ -331,6 +355,11 @@ DELETE /admin/v1/roles/:id
 ### 4.1 Branch Type CRUD
 
 Branch types adalah konfigurasi per organization — mendefinisikan jenis-jenis kantor.
+
+Catatan boundary:
+- CRUD branch types dan branches di auth7 mengelola **projection auth** yang dipakai untuk scoping akses
+- branch operasional/master tetap dimiliki `core7-service-enterprise`
+- integrasi admin utama untuk area ini berasal dari `bos7-enterprise`
 
 ```
 GET    /admin/v1/orgs/:org_id/branch-types

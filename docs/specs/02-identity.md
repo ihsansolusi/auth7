@@ -92,10 +92,20 @@ type UserBranchAssignment struct {
 | `Deleted` | Soft delete, data tetap untuk audit |
 
 ### 2.2 User Attributes (extensible)
+
+User attributes di auth7 hanya menyimpan identity context yang dibutuhkan runtime IAM.
+Untuk domain enterprise, attribute diperlakukan sebagai reference ke owner eksternal, misalnya:
+- `employee_id`
+- `department_code`
+- `position_code`
+- `branch_code`
+
+Auth7 tidak menjadi owner employee, department, position, atau branch master enterprise.
+
 ```go
 type UserAttribute struct {
     UserID uuid.UUID
-    Key    string   // "employee_id", "department", "position", etc.
+    Key    string   // "employee_id", "department_code", "position_code", "branch_code", etc.
     Value  string
 }
 ```
@@ -313,7 +323,7 @@ Response:
   "last_login_at": "2026-04-22T10:00:00Z",
   "attributes": {
     "employee_id": "EMP-001",
-    "department": "IT"
+    "department_code": "IT"
   }
 }
 ```
