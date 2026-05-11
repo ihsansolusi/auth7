@@ -29,6 +29,13 @@ Keputusan yang mengikat data model auth7:
 
 ABAC di auth7 boleh memakai data dari `policy7`, tetapi data tersebut tidak dimaterialisasi menjadi tabel business-policy owner di schema auth7. Jika caching lokal diperlukan, caching dianggap mekanisme runtime, bukan source of truth schema.
 
+### 1.3 Consumer Contract Persistence (Wave 2)
+
+Untuk `Wave 2`, auth7 mendefinisikan bagaimana payload dari owner eksternal dipersist sebagai reference:
+- source kontrak branch dari `core7-service-enterprise` dipersist sebagai projection + mapping reference
+- source kontrak employee dari `core7-service-enterprise` dipersist sebagai user reference attributes
+- mapping ini tidak mengubah ownership level 1; hanya menyiapkan struktur consumer-side
+
 ---
 
 ## 2. Core Tables
@@ -110,6 +117,8 @@ CREATE INDEX idx_branch_types_level ON branch_types(org_id, level);
 ### 2.3 `branches` — Kantor/Cabang Bank
 
 > **Boundary note**: tabel `branches` di auth7 adalah auth projection yang dipakai untuk branch assignment, active branch, dan authorization scope. Master branch operasional tetap dimiliki `core7-service-enterprise`.
+>
+> **Wave 2 consumer contract note**: projection ini harus menyimpan reference stabil ke source branch enterprise (mis. `enterprise_branch_id`) agar sync contract bisa deterministic.
 
 ```sql
 CREATE TABLE branches (
@@ -284,6 +293,13 @@ CREATE INDEX idx_user_cred_history_user_id ON user_credential_history(user_id);
 - `branch_code`
 
 Attribute tersebut adalah compatibility/integration reference ke `core7-service-enterprise`, bukan source of truth baru di auth7.
+
+Kontrak employee reference minimal yang harus bisa dipersist:
+- `employee_id`
+- `department_code`
+- `position_code`
+- `home_enterprise_branch_id`
+- `employment_status` (contextual)
 
 ```sql
 CREATE TABLE user_attributes (

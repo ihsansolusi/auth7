@@ -32,6 +32,29 @@ Auth7 menggunakan **hybrid RBAC + ABAC** untuk authorization:
 - **RBAC** (Role-Based Access Control): 90% use cases — role → permission mapping
 - **ABAC** (Attribute-Based Access Control): 10% use cases — time-based, multi-attribute, complex logic
 
+### 1.1 Legacy Translation Baseline (Wave 2)
+
+Baseline ini mendefinisikan translasi semantic dari artefak legacy enterprise ke model permission auth7.
+Tujuannya adalah kontrak mapping, bukan eksekusi migrasi/wiring runtime.
+
+| Legacy Artifact | Semantic Legacy | Target Auth7 Baseline |
+|---|---|---|
+| `enterprise.peran` | role definition | `roles` (auth7 role object) |
+| `enterprise.listperanuser` | user-role binding | `user_roles` scoped by `org_id` + `branch_id` |
+| `enterprise.rolemenulist` | role -> menu visibility | permission `menu:{menu_key}:access` pada role |
+| `enterprise.usermenulist` | user-specific menu override | user permission override/exception (compatibility path, non-primary) |
+| legacy function/action list | operation grant per module | permission `{resource}:{action}` |
+
+Baseline permission naming rules:
+- menu visibility: `menu:{menu_key}:access`
+- object access: `{resource}:{action}`
+- privileged operation: `{resource}:{action}:elevated` (opsional jika dibutuhkan)
+
+Compatibility rules:
+1. role, menu, dan function legacy tidak menjadi source of truth baru.
+2. hasil translasi harus berujung ke objek `role` dan `permission` milik auth7.
+3. jika satu artifact legacy ambigu, mapping dicatat sebagai `compatibility-only` sampai ada keputusan lintas stream.
+
 ---
 
 ## 2. Authorization Layers

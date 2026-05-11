@@ -2,13 +2,15 @@
 
 > **Status**: Draft  
 > **Umbrella**: `core7-devroot#200`  
-> **Wave Coordinator**: `core7-devroot#202`  
+> **Wave Coordinator (W1)**: `core7-devroot#202`  
+> **Wave Coordinator (W2)**: `core7-devroot#203`  
 > **Stream Epic**: `auth7#114`  
 > **Depends on**: Plans 05, 07, 08, 10, 11  
 > **Reference**:
 > - [`docs/architecture/auth7-policy7-enterprise-boundary.md`](../../../../docs/architecture/auth7-policy7-enterprise-boundary.md)
 > - [`docs/architecture/auth7-policy7-enterprise-change-control.md`](../../../../docs/architecture/auth7-policy7-enterprise-change-control.md)
 > - [`docs/plans/integration/PLAN-12-WAVE-1-BACKEND-AUTHORITY-LOCK.md`](../../../../docs/plans/integration/PLAN-12-WAVE-1-BACKEND-AUTHORITY-LOCK.md)
+> - [`docs/plans/integration/PLAN-12-enterprise-boundary-alignment.md`](../../../../docs/plans/integration/PLAN-12-enterprise-boundary-alignment.md)
 
 ---
 
@@ -72,6 +74,44 @@ Status `Wave 1`:
 - belum menjadi blocker untuk spec lock di repo ini
 - harus dibawa ke coordinator sebagai dependency sebelum masuk wiring/cutover wave berikutnya
 
+## Wave 2 Scope
+
+Plan ini menurunkan `Plan 12 Wave 2` untuk stream `auth7`. Fokus wave ini hanya pada
+contract dan mapping definition sebagai consumer-side readiness, belum masuk wiring runtime (Wave 3).
+
+Deliverable inti `Wave 2`:
+- definisi branch projection contract consumer-side
+- definisi employee reference contract consumer-side
+- definisi baseline translasi legacy role/menu/function ke permission auth7
+
+## Wave 2 Issue Set
+
+| Issue | Fokus | Target Artefak |
+|---|---|---|
+| `auth7#119` | Define branch projection contract consumer side | integration, data model, plan |
+| `auth7#120` | Define employee reference contract consumer side | identity, integration, data model, plan |
+| `auth7#121` | Define legacy role/menu/function -> permission baseline | authorization, admin API/integration, plan |
+
+## Contract Owner/Consumer Matrix (Wave 2)
+
+| Contract Area | Contract Owner | Consumer | Auth7 Position |
+|---|---|---|---|
+| Branch master projection feed | `core7-service-enterprise` | `auth7` | consumer |
+| Employee reference feed | `core7-service-enterprise` | `auth7` | consumer |
+| Policy parameter context for ABAC | `policy7` | `auth7` | consumer |
+| Legacy role/menu/function translation baseline | `auth7` | `bos7-enterprise` (admin facade), migration tools | baseline owner (mapping definition only) |
+
+## Dependencies and Blockers (Wave 2)
+
+Dependency lintas stream yang harus tersedia sebelum masuk `Wave 3` wiring:
+- `core7-service-enterprise` menyediakan source contract branch projection yang stabil (identity key, status semantics, hierarchy linkage)
+- `core7-service-enterprise` menyediakan source contract employee reference yang stabil (employee identity key + org/branch linkage)
+- `policy7` menyediakan kontrak parameter context yang dibutuhkan ABAC auth7 tanpa memindahkan policy truth ke auth schema
+
+Status `Wave 2`:
+- auth7 mendefinisikan consumer contract dan mapping baseline di level spec
+- unresolved lintas stream harus dicatat di coordinator `core7-devroot#203` sebagai dependency, bukan diresolusikan unilateral oleh auth7
+
 ---
 
 ## Work Items
@@ -115,6 +155,8 @@ Status `Wave 1`:
 - Contract field final untuk branch projection sync
 - Contract field final untuk employee reference sync
 - Implementasi cache/event untuk konsumsi `policy7`
+- Implementasi runtime adapter/scheduler/sync worker untuk kontrak branch/employee
+- Implementasi migrasi data legacy live untuk role/menu/function translation
 
 ---
 

@@ -231,6 +231,18 @@ func (s *TaskService) ApproveTask(ctx context.Context, taskID uuid.UUID) error {
 
 ## 4. Integrasi per Service
 
+### 4.0 Contract Matrix (Consumer-Side, Wave 2)
+
+| Contract Area | Owner | Consumer | Interface Class | Status W2 |
+|---|---|---|---|---|
+| Branch projection source | `core7-service-enterprise` | `auth7` | source contract (API/event) | consumer contract defined |
+| Employee reference source | `core7-service-enterprise` | `auth7` | source contract (API/event) | consumer contract defined |
+| Policy parameter context | `policy7` | `auth7` | runtime policy lookup/input | dependency declared |
+| Legacy role/menu/function mapping baseline | `auth7` | `bos7-enterprise` + migration path | mapping definition | baseline defined |
+
+Wave 2 hanya mendefinisikan kontrak consumer-side dan mapping baseline.
+Implementasi wiring runtime akan dikerjakan di Wave 3.
+
 ### 4.1 workflow7
 
 ```
@@ -335,6 +347,55 @@ Enterprise master integration:
 ```
 
 Auth7 tidak mengambil alih master data enterprise; auth7 hanya memakai data yang diperlukan untuk identity dan authorization context.
+
+### 4.5.1 Branch Projection Consumer Contract (Auth7 Side)
+
+Tujuan kontrak ini adalah memastikan projection branch di auth7 memiliki input minimum yang konsisten
+tanpa memindahkan ownership branch master dari `core7-service-enterprise`.
+
+Required inbound fields (consumer expectation):
+- `org_id`
+- `enterprise_branch_id` (stable source identifier)
+- `branch_code`
+- `branch_name`
+- `branch_status`
+- `parent_enterprise_branch_id` (nullable)
+- `branch_type_code`
+- `updated_at`
+
+Consumer-side rules:
+1. auth7 menyimpan `enterprise_branch_id` sebagai mapping reference ke projection row `branches`.
+2. auth7 tidak menurunkan business owner fields baru; hanya field yang dibutuhkan access scope.
+3. jika source payload tidak lengkap, record diberi status drift/pending-sync (bukan diperlakukan master override lokal).
+4. sinkronisasi hierarchy di auth7 mengikuti referensi `parent_enterprise_branch_id`, bukan inferensi bebas dari auth7.
+
+### 4.5.2 Employee Reference Consumer Contract (Auth7 Side)
+
+Tujuan kontrak ini adalah mengikat attribute/reference employee untuk auth context
+tanpa memindahkan ownership employee master ke auth7.
+
+Required inbound fields (consumer expectation):
+- `org_id`
+- `employee_id` (stable source identifier)
+- `user_lookup_key` (mis. username/email/external subject sesuai kontrak stream enterprise)
+- `department_code` (nullable)
+- `position_code` (nullable)
+- `home_enterprise_branch_id` (nullable)
+- `employment_status` (nullable; dipakai sebagai context, bukan authority lifecycle auth)
+- `updated_at`
+
+Consumer-side rules:
+1. mapping employee ke user auth7 harus tersimpan sebagai reference (`user_attributes` atau mapping table kompatibel).
+2. auth7 tidak melakukan lifecycle management employee; status employee digunakan hanya sebagai input context authorization.
+3. jika linkage employee belum tersedia, user auth7 tetap dapat hidup dengan attribute minimal tanpa membuat master data baru.
+4. perubahan employee source tidak langsung mengubah boundary role/permission owner auth7.
+
+### 4.5.3 Dependency Notes for Wave 3
+
+Agar wiring runtime bisa dimulai di Wave 3, auth7 membutuhkan finalisasi dari stream lain:
+- definisi final schema contract branch projection dari `core7-service-enterprise`
+- definisi final schema contract employee reference dari `core7-service-enterprise`
+- konfirmasi caller context policy input yang dipakai auth7 dari `policy7`
 
 ### 4.6 service7-template
 
