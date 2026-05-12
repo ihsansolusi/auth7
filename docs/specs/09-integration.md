@@ -317,6 +317,25 @@ Prinsip:
 - auth7 tetap backend owner
 - auth7-ui bukan admin console utama untuk operasi ini
 
+#### 4.3.1 BFF Semantics (Allowed vs Disallowed)
+
+Allowed semantics untuk `bos7-enterprise` BFF terhadap Access Management:
+- proxy/adaptor ke endpoint `auth7` tanpa mengambil alih authority decision
+- request enrichment teknis (header propagation, correlation id, retry terbatas)
+- response normalization UI-level selama tidak mengubah keputusan business authority
+
+Disallowed semantics:
+- re-implement lifecycle authority user/role/permission/session di layer BFF
+- menyimpan source of truth IAM baru di BFF atau backend non-auth7
+- membuat approval UI/API/facade untuk Access Management di `bos7-enterprise`
+- mengalihkan capability Policy Management ke auth7, atau Enterprise Master ke auth7
+
+Steady-state routing lock:
+- Access Management -> `auth7`
+- Policy Management -> `policy7`
+- Enterprise Master -> `core7-service-enterprise`
+- Monitoring/Audit (non-approval) -> `audit7` (phase-in)
+
 ### 4.4 bos7-portal / bos7-template (Next.js)
 
 ```

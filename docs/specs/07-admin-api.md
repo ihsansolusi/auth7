@@ -49,6 +49,46 @@ Admin API ini tidak mengambil alih:
 Jika admin flow membutuhkan policy input, auth7 hanya consume hasil/parameter dari `policy7`
 sesuai kebutuhan authorization runtime; admin CRUD policy tetap di backend `policy7`.
 
+### 1.4 Access Management Contract Finalization (W2 / #129)
+
+Final contract ini mengunci bahwa semua capability Access Management yang dikonsumsi
+`bos7-enterprise` tetap dimiliki backend `auth7`, tanpa ambiguity owner.
+
+| Capability | Endpoint(s) | API Owner | Data Owner |
+|---|---|---|---|
+| User lifecycle (list/create/update/lock/unlock/suspend/delete) | `GET/POST /admin/v1/users`, `PUT/DELETE /admin/v1/users/:id`, `POST /admin/v1/users/:id/lock`, `POST /admin/v1/users/:id/unlock`, `POST /admin/v1/users/:id/suspend` | `auth7` | `auth7` |
+| Role & permission management | `GET/POST /admin/v1/roles`, `PUT/DELETE /admin/v1/roles/:id`, `GET /admin/v1/permissions`, `POST /admin/v1/roles/:id/permissions` | `auth7` | `auth7` |
+| Branch assignment (access scope) | `PUT /admin/v1/users/:id/branch-assignments`, `GET/POST /admin/v1/users/:id/branches`, `DELETE /admin/v1/users/:user_id/branches/:assignment_id` | `auth7` | `auth7` (projection + assignment) |
+| Session admin visibility/revocation | `GET /admin/v1/sessions`, `DELETE /admin/v1/sessions/:id`, `DELETE /admin/v1/users/:id/sessions` | `auth7` | `auth7` |
+| Facade readiness/compatibility reads | `GET /admin/v1/facade/contracts/readiness`, `GET /admin/v1/facade/access/*`, `GET /admin/v1/facade/compatibility/*` | `auth7` | `auth7` |
+
+Guardrail eksplisit:
+- Tidak ada approval UI/API/facade untuk Access Management di `bos7-enterprise`.
+- Approval flow (jika ada) tetap domain `workflow7`/modul terkait, bukan authority admin auth7.
+- Policy Management tetap ke `policy7`; Enterprise Master tetap ke `core7-service-enterprise`.
+
+### 1.5 Contract Scoping & Error Semantics Baseline
+
+Scoping minimum untuk seluruh Access Management request:
+1. `org_id` wajib eksplisit (query atau claim binding yang ekuivalen).
+2. `branch_id` hanya untuk access scope assignment/projection, bukan branch master authority.
+3. `role_id`/`permission_id` harus mengacu ke objek auth7 dalam tenant scope.
+
+Error semantics baseline:
+- Validation/input error: `400` (`invalid_request`, `invalid org_id`, `invalid role id`, dll.)
+- Unauthorized token/session: `401` (`invalid_token`)
+- Permission denied: `403`
+- Not found: `404` (untuk resource non-eksis)
+- Internal: `500` (`internal_error`)
+
+Untuk facade path, catalog code yang dipakai:
+- `AUTH7_FACADE_INVALID_ORG_ID`
+- `AUTH7_FACADE_INVALID_USER_ID`
+- `AUTH7_FACADE_INVALID_REQUEST`
+- `AUTH7_FACADE_NOT_FOUND`
+- `AUTH7_FACADE_PERMISSION_DENIED`
+- `AUTH7_FACADE_INTERNAL_ERROR`
+
 ---
 
 ## 2. User Management

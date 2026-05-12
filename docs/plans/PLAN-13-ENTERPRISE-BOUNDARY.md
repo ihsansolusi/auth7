@@ -4,6 +4,7 @@
 > **Umbrella**: `core7-devroot#200`  
 > **Wave Coordinator (W1)**: `core7-devroot#202`  
 > **Wave Coordinator (W2)**: `core7-devroot#203`  
+> **Wave Coordinator (W2 Finalization)**: `core7-devroot#210`  
 > **Wave Coordinator (W3)**: `core7-devroot#204`  
 > **Wave Coordinator (W4)**: `core7-devroot#205`  
 > **Stream Epic**: `auth7#114`  
@@ -113,6 +114,31 @@ Dependency lintas stream yang harus tersedia sebelum masuk `Wave 3` wiring:
 Status `Wave 2`:
 - auth7 mendefinisikan consumer contract dan mapping baseline di level spec
 - unresolved lintas stream harus dicatat di coordinator `core7-devroot#203` sebagai dependency, bukan diresolusikan unilateral oleh auth7
+
+## Wave 2 Finalization (Issue #129)
+
+Objective:
+- finalisasi readiness kontrak admin API auth7 untuk konsumsi `bos7-enterprise`
+- hapus ambiguity ownership untuk Access Management capability
+- lock semantic BFF yang diizinkan dan yang dilarang
+
+Final mapping reference:
+- capability -> endpoint -> API owner -> data owner dikunci di `docs/specs/07-admin-api.md` (Section 1.4)
+- semantic BFF allowed/disallowed dikunci di `docs/specs/09-integration.md` (Section 4.3.1)
+
+Gap kontrak yang masih terbuka (residual, non-boundary change):
+1. sebagian endpoint legacy masih memakai variasi payload respons (`users` vs `data`) antar handler lama/facade.
+2. not-found mapping (`404`) belum konsisten di seluruh handler admin legacy (beberapa masih fallback `500`).
+3. scoping org-branch-role sudah terkunci secara aturan, tetapi enforcement parity antar endpoint butuh audit runtime lintas stream.
+
+Keputusan untuk gap:
+- tidak redefinisi boundary; gap ditrack sebagai harmonization task implementasi bertahap.
+- tetap lock ownership: Access Management authority di auth7.
+- approval scope tetap dilarang pada `bos7-enterprise` untuk Access Management.
+
+Residual risk (untuk coordinator `#210`):
+- risiko integrasi UI jika S5 mengasumsikan payload/error format seragam sebelum harmonization selesai.
+- risiko salah routing bila workspace boundary di S5 belum mengikuti lock final.
 
 ## Wave 4 Scope
 
