@@ -30,42 +30,19 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     psql "$AUTH7_DB_URL" -c "DROP SCHEMA IF EXISTS auth7 CASCADE;" 2>/dev/null || true
     psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations;" 2>/dev/null || true
     echo "→ DB reset complete."
+  else
+    # Fix dirty migration state from any previous failed deploy
+    DIRTY=$(psql "$AUTH7_DB_URL" -tAc "SELECT COUNT(*) FROM schema_migrations WHERE dirty=true" 2>/dev/null || echo "0")
+    if [ "$DIRTY" != "0" ] && [ -n "$DIRTY" ]; then
+      echo "→ Repairing dirty migration state (${DIRTY} entry)..."
+      psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations WHERE dirty=true;" 2>/dev/null || true
+    fi
   fi
   echo "→ Database ready."
 fi
 
-# Run migrations with dirty-state retry loop.
-# schema_migrations can get corrupted (missing entries + dirty flags) after failed
-# deploys. Each "already exists" failure marks the migration dirty and exits.
-# We force the dirty version clean and retry until migrate up succeeds, ensuring
-# truly new migrations (INSERT-only, not CREATE TABLE) still run normally.
 echo "→ Running database migrations..."
-MIGRATION_ATTEMPTS=0
-while [ "$MIGRATION_ATTEMPTS" -lt 100 ]; do
-  # Force any dirty migration clean before attempting migrate up.
-  DIRTY_VER=$(psql "$AUTH7_DB_URL" -tAc \
-    "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" \
-    2>/dev/null | tr -d '[:space:]' || echo "")
-  if [ -n "$DIRTY_VER" ]; then
-    echo "  → Forcing dirty migration ${DIRTY_VER} clean..."
-    ./auth7 migrate force "$DIRTY_VER" 2>/dev/null || \
-      psql "$AUTH7_DB_URL" -c \
-        "UPDATE schema_migrations SET dirty=false WHERE version=${DIRTY_VER};" \
-      2>/dev/null || true
-  fi
-  MIG_OUT=$(./auth7 migrate up 2>&1)
-  MIG_RC=$?
-  if [ $MIG_RC -eq 0 ]; then
-    break
-  fi
-  # Only retry for "already exists" or dirty-database errors; fail fast otherwise.
-  echo "$MIG_OUT" | grep -qE "already exists|Dirty database" || { echo "$MIG_OUT"; exit 1; }
-  MIGRATION_ATTEMPTS=$((MIGRATION_ATTEMPTS + 1))
-done
-if [ "$MIGRATION_ATTEMPTS" -ge 100 ]; then
-  echo "→ ERROR: migrations did not converge after 100 attempts"
-  exit 1
-fi
+./auth7 migrate up
 echo "→ Migrations done."
 
 if [ -n "$DATABASE_ADMIN_URL" ] && [ -f scripts/seed-data.sql ]; then
