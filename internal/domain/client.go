@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,8 +95,9 @@ func (c *Client) AllowedGrants() []GrantType {
 }
 
 func (c *Client) ValidateRedirectURI(uri string) bool {
+	normalized := strings.TrimRight(strings.TrimSpace(uri), "/")
 	for _, allowed := range c.AllowedRedirectURIs {
-		if allowed == uri {
+		if strings.TrimRight(strings.TrimSpace(allowed), "/") == normalized {
 			return true
 		}
 	}

@@ -71,6 +71,11 @@ func (s *Server) handleAuthorize(c *gin.Context) {
 	}
 
 	if !client.ValidateRedirectURI(redirectURI) {
+		s.deps.Logger.Error().
+			Str("client_id", clientID).
+			Str("received_redirect_uri", redirectURI).
+			Strs("allowed_redirect_uris", client.AllowedRedirectURIs).
+			Msg("handleAuthorize: invalid_redirect_uri")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
 		return
 	}
@@ -189,7 +194,15 @@ func (s *Server) handleAuthorizeWithSession(c *gin.Context) {
 	}
 
 	if !client.ValidateRedirectURI(req.RedirectURI) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_redirect_uri"})
+		s.deps.Logger.Error().
+			Str("client_id", req.ClientID).
+			Str("received_redirect_uri", req.RedirectURI).
+			Strs("allowed_redirect_uris", client.AllowedRedirectURIs).
+			Msg("handleAuthorizeWithSession: invalid_redirect_uri")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_redirect_uri",
+			"error_description": "redirect_uri tidak terdaftar untuk client ini",
+		})
 		return
 	}
 

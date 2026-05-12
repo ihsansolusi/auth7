@@ -51,4 +51,24 @@ if [ -n "$DATABASE_ADMIN_URL" ] && [ -f scripts/seed-data.sql ]; then
   echo "→ Seed done."
 fi
 
+# Ensure extra redirect URIs are present (idempotent).
+# Seed-data.sql handles Railway URIs by default. This block handles:
+#   1. Custom deployment domains (set EXTRA_REDIRECT_DOMAIN env var)
+#   2. Legacy cleanup if old images are still running
+if [ -n "$DATABASE_ADMIN_URL" ] && [ -n "$EXTRA_REDIRECT_DOMAIN" ]; then
+  echo "→ Ensuring extra redirect URIs for domain: ${EXTRA_REDIRECT_DOMAIN}"
+  AUTH7_DB="${DATABASE_ADMIN_URL%/postgres*}/auth7?sslmode=disable"
+  for app in portal:3006 enterprise:3003 financing:3010 funding:3011 treasury:3012 smt:3013 accounting:3014 cif:3015 internalaccount:3016 remittance:3017 batchprocessing:3018; do
+    client_id="bos7-${app%%:*}"
+    extra_uri="https://bos7-${app%%:*}.${EXTRA_REDIRECT_DOMAIN}/api/auth/callback"
+    extra_app="https://bos7-${app%%:*}.${EXTRA_REDIRECT_DOMAIN}"
+    psql "$AUTH7_DB" -c "UPDATE oauth2_clients SET app_url = '${extra_app}' WHERE client_id = '${client_id}';" 2>/dev/null || true
+    psql "$AUTH7_DB" -c "UPDATE oauth2_clients SET allowed_redirect_uris = array_append(allowed_redirect_uris, '${extra_uri}') WHERE client_id = '${client_id}' AND NOT ('${extra_uri}' = ANY(allowed_redirect_uris));" 2>/dev/null || true
+  done
+  # auth7-ui uses 'account' subdomain, not 'bos7-' prefix
+  AUTH7_UI_URI="https://account.${EXTRA_REDIRECT_DOMAIN}/api/auth/callback"
+  psql "$AUTH7_DB" -c "UPDATE oauth2_clients SET allowed_redirect_uris = array_append(allowed_redirect_uris, '${AUTH7_UI_URI}') WHERE client_id = 'auth7-ui-dev' AND NOT ('${AUTH7_UI_URI}' = ANY(allowed_redirect_uris));" 2>/dev/null || true
+  echo "→ Extra redirect URIs ensured."
+fi
+
 exec "$@"
