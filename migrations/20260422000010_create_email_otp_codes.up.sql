@@ -1,7 +1,7 @@
 -- Migration: Create email_otp_codes table
 -- Up
 
-CREATE TABLE email_otp_codes (
+CREATE TABLE IF NOT EXISTS email_otp_codes (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id     UUID NOT NULL REFERENCES public.users(id),
     code        VARCHAR(6) NOT NULL,
@@ -12,6 +12,6 @@ CREATE TABLE email_otp_codes (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_email_otp_user_id ON email_otp_codes(user_id);
-CREATE INDEX idx_email_otp_expires ON email_otp_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_email_otp_user_id ON email_otp_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_otp_expires ON email_otp_codes(expires_at);
 

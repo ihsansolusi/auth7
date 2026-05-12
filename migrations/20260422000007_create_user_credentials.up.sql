@@ -1,7 +1,7 @@
 -- Migration: Create user_credentials and user_credential_history tables
 -- Up
 
-CREATE TABLE user_credentials (
+CREATE TABLE IF NOT EXISTS user_credentials (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES public.users(id),
     credential_type VARCHAR(50) NOT NULL DEFAULT 'password',
@@ -12,13 +12,13 @@ CREATE TABLE user_credentials (
     expires_at      TIMESTAMPTZ
 );
 
-CREATE TABLE user_credential_history (
+CREATE TABLE IF NOT EXISTS user_credential_history (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES public.users(id),
     secret_hash     TEXT NOT NULL,
     retired_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_user_credentials_user_id ON user_credentials(user_id);
-CREATE INDEX idx_user_cred_history_user_id ON user_credential_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_credentials_user_id ON user_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_cred_history_user_id ON user_credential_history(user_id);
 

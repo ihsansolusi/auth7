@@ -1,7 +1,7 @@
 -- Migration: Create users table
 -- Up
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id                  UUID NOT NULL REFERENCES public.organizations(id),
     username                VARCHAR(100) NOT NULL,
@@ -27,8 +27,8 @@ CREATE TABLE users (
     UNIQUE (org_id, email)
 );
 
-CREATE INDEX idx_users_org_id ON users(org_id);
-CREATE INDEX idx_users_email ON users(org_id, email);
-CREATE INDEX idx_users_status ON users(org_id, status);
-CREATE INDEX idx_users_deleted ON users(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(org_id, email);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(org_id, status);
+CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted_at) WHERE deleted_at IS NOT NULL;
 

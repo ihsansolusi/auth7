@@ -1,7 +1,7 @@
 -- Migration: Create oauth2_clients table
 -- Issue: #38
 
-CREATE TABLE oauth2_clients (
+CREATE TABLE IF NOT EXISTS oauth2_clients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id VARCHAR(128) UNIQUE NOT NULL,
     org_id UUID NOT NULL REFERENCES public.organizations(id),
@@ -23,10 +23,10 @@ CREATE TABLE oauth2_clients (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth2_clients_org_id ON oauth2_clients(org_id);
-CREATE INDEX idx_oauth2_clients_client_id ON oauth2_clients(client_id);
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_org_id ON oauth2_clients(org_id);
+CREATE INDEX IF NOT EXISTS idx_oauth2_clients_client_id ON oauth2_clients(client_id);
 
-CREATE TABLE oauth2_authorization_codes (
+CREATE TABLE IF NOT EXISTS oauth2_authorization_codes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(64) UNIQUE NOT NULL,
     client_id VARCHAR(128) NOT NULL REFERENCES public.oauth2_clients(client_id),
@@ -41,10 +41,10 @@ CREATE TABLE oauth2_authorization_codes (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_oauth2_auth_codes_code ON oauth2_authorization_codes(code);
-CREATE INDEX idx_oauth2_auth_codes_client_id ON oauth2_authorization_codes(client_id);
-CREATE INDEX idx_oauth2_auth_codes_user_id ON oauth2_authorization_codes(user_id);
-CREATE INDEX idx_oauth2_auth_codes_expires_at ON oauth2_authorization_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oauth2_auth_codes_code ON oauth2_authorization_codes(code);
+CREATE INDEX IF NOT EXISTS idx_oauth2_auth_codes_client_id ON oauth2_authorization_codes(client_id);
+CREATE INDEX IF NOT EXISTS idx_oauth2_auth_codes_user_id ON oauth2_authorization_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth2_auth_codes_expires_at ON oauth2_authorization_codes(expires_at);
 
 COMMENT ON TABLE oauth2_clients IS 'OAuth2 client registry (DCR RFC 7591)';
 COMMENT ON TABLE oauth2_authorization_codes IS 'Temporary authorization codes for code flow';

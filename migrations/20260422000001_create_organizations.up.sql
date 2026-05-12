@@ -1,7 +1,7 @@
 -- Migration: Create organizations table
 -- Up
 
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code            VARCHAR(20) NOT NULL UNIQUE,
     name            VARCHAR(255) NOT NULL,

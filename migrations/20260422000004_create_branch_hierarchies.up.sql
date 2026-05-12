@@ -1,7 +1,7 @@
 -- Migration: Create branch_hierarchies table
 -- Up
 
-CREATE TABLE branch_hierarchies (
+CREATE TABLE IF NOT EXISTS branch_hierarchies (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id          UUID NOT NULL REFERENCES public.organizations(id),
     parent_id       UUID REFERENCES public.branches(id),
@@ -13,7 +13,7 @@ CREATE TABLE branch_hierarchies (
     UNIQUE (org_id, child_id)
 );
 
-CREATE INDEX idx_branch_hierarchies_parent ON branch_hierarchies(org_id, parent_id);
-CREATE INDEX idx_branch_hierarchies_child ON branch_hierarchies(org_id, child_id);
-CREATE INDEX idx_branch_hierarchies_path ON branch_hierarchies(org_id, path);
+CREATE INDEX IF NOT EXISTS idx_branch_hierarchies_parent ON branch_hierarchies(org_id, parent_id);
+CREATE INDEX IF NOT EXISTS idx_branch_hierarchies_child ON branch_hierarchies(org_id, child_id);
+CREATE INDEX IF NOT EXISTS idx_branch_hierarchies_path ON branch_hierarchies(org_id, path);
 

@@ -1,7 +1,7 @@
 -- Migration: Create branch_types table
 -- Up
 
-CREATE TABLE branch_types (
+CREATE TABLE IF NOT EXISTS branch_types (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id          UUID NOT NULL REFERENCES public.organizations(id),
     code            VARCHAR(50) NOT NULL,
@@ -16,8 +16,8 @@ CREATE TABLE branch_types (
     UNIQUE (org_id, code)
 );
 
-CREATE INDEX idx_branch_types_org ON branch_types(org_id);
-CREATE INDEX idx_branch_types_level ON branch_types(org_id, level);
+CREATE INDEX IF NOT EXISTS idx_branch_types_org ON branch_types(org_id);
+CREATE INDEX IF NOT EXISTS idx_branch_types_level ON branch_types(org_id, level);
 
 COMMENT ON TABLE branch_types IS 'Configurable branch type per organization';
 

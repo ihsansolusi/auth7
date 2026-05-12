@@ -1,7 +1,7 @@
 -- Migration: Create branches table
 -- Up
 
-CREATE TABLE branches (
+CREATE TABLE IF NOT EXISTS branches (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id          UUID NOT NULL REFERENCES public.organizations(id),
     branch_type_id  UUID NOT NULL REFERENCES public.branch_types(id),
@@ -16,6 +16,6 @@ CREATE TABLE branches (
     UNIQUE (org_id, code)
 );
 
-CREATE INDEX idx_branches_org_id ON branches(org_id);
-CREATE INDEX idx_branches_type ON branches(branch_type_id);
+CREATE INDEX IF NOT EXISTS idx_branches_org_id ON branches(org_id);
+CREATE INDEX IF NOT EXISTS idx_branches_type ON branches(branch_type_id);
 

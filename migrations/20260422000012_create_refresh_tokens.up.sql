@@ -1,7 +1,7 @@
 -- Migration: Create refresh_tokens table
 -- Up
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     jti             UUID NOT NULL UNIQUE,
     token_hash      TEXT NOT NULL,
@@ -18,8 +18,8 @@ CREATE TABLE refresh_tokens (
     replaced_by     UUID
 );
 
-CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
-CREATE INDEX idx_refresh_tokens_family ON refresh_tokens(family_id);
-CREATE INDEX idx_refresh_tokens_expires ON refresh_tokens(expires_at);
-CREATE INDEX idx_refresh_tokens_session ON refresh_tokens(session_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session ON refresh_tokens(session_id);
 

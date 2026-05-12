@@ -1,7 +1,7 @@
 -- Migration: Create roles and permissions tables
 -- Issue: #70
 
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES public.organizations(id),
     code VARCHAR(50) NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE roles (
     UNIQUE(org_id, code)
 );
 
-CREATE TABLE permissions (
+CREATE TABLE IF NOT EXISTS permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(100) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
@@ -22,14 +22,14 @@ CREATE TABLE permissions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE role_permissions (
+CREATE TABLE IF NOT EXISTS role_permissions (
     role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
     permission_id UUID NOT NULL REFERENCES public.permissions(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (role_id, permission_id)
 );
 
-CREATE TABLE user_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     role_id UUID NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
@@ -42,14 +42,14 @@ CREATE TABLE user_roles (
     UNIQUE(user_id, role_id, org_id, branch_id)
 );
 
-CREATE INDEX idx_roles_org ON roles(org_id);
-CREATE INDEX idx_roles_code ON roles(org_id, code);
-CREATE INDEX idx_permissions_code ON permissions(code);
-CREATE INDEX idx_permissions_resource ON permissions(resource_type);
-CREATE INDEX idx_user_roles_user ON user_roles(user_id);
-CREATE INDEX idx_user_roles_role ON user_roles(role_id);
-CREATE INDEX idx_user_roles_org ON user_roles(org_id);
-CREATE INDEX idx_user_roles_branch ON user_roles(branch_id);
+CREATE INDEX IF NOT EXISTS idx_roles_org ON roles(org_id);
+CREATE INDEX IF NOT EXISTS idx_roles_code ON roles(org_id, code);
+CREATE INDEX IF NOT EXISTS idx_permissions_code ON permissions(code);
+CREATE INDEX IF NOT EXISTS idx_permissions_resource ON permissions(resource_type);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_org ON user_roles(org_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_branch ON user_roles(branch_id);
 
 COMMENT ON TABLE roles IS 'Role definitions for RBAC';
 COMMENT ON TABLE permissions IS 'Permission definitions';

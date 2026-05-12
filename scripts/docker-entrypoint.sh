@@ -31,7 +31,8 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations;" 2>/dev/null || true
     echo "→ DB reset complete."
   else
-    # Fix dirty migration state from any previous failed deploy
+    # Fix dirty migration state: mark dirty entries as clean (not delete).
+    # Migrations now use CREATE TABLE/INDEX IF NOT EXISTS so retrying is safe.
     DIRTY=$(psql "$AUTH7_DB_URL" -tAc "SELECT COUNT(*) FROM schema_migrations WHERE dirty=true" 2>/dev/null || echo "0")
     if [ "$DIRTY" != "0" ] && [ -n "$DIRTY" ]; then
       echo "→ Repairing dirty migration state (${DIRTY} entry)..."
