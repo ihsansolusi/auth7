@@ -30,30 +30,42 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     psql "$AUTH7_DB_URL" -c "DROP SCHEMA IF EXISTS auth7 CASCADE;" 2>/dev/null || true
     psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations;" 2>/dev/null || true
     echo "→ DB reset complete."
-  else
-    # Pre-populate schema_migrations for all migration files that exist on disk.
-    # This handles the case where schema_migrations lost entries (e.g. after a reset)
-    # but the tables themselves already exist. Without this, golang-migrate would try
-    # to re-apply old migrations and fail with "relation already exists".
-    echo "→ Syncing schema_migrations with migration files on disk..."
-    for f in migrations/*.up.sql; do
-      [ -f "$f" ] || continue
-      ver=$(basename "$f" | sed 's/_.*//')
-      psql "$AUTH7_DB_URL" -c "INSERT INTO schema_migrations (version, dirty) VALUES ($ver, false) ON CONFLICT (version) DO UPDATE SET dirty=false;" 2>/dev/null || true
-    done
-    # Fix any remaining dirty entries using migrate force (marks clean without re-running).
-    DIRTY_VERSION=$(psql "$AUTH7_DB_URL" -tAc "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" 2>/dev/null | tr -d '[:space:]' || echo "")
-    if [ -n "$DIRTY_VERSION" ]; then
-      echo "→ Repairing dirty migration state (version ${DIRTY_VERSION})..."
-      ./auth7 migrate force "$DIRTY_VERSION" 2>/dev/null || \
-        psql "$AUTH7_DB_URL" -c "UPDATE schema_migrations SET dirty=false WHERE version=${DIRTY_VERSION};" 2>/dev/null || true
-    fi
   fi
   echo "→ Database ready."
 fi
 
+# Run migrations with dirty-state retry loop.
+# schema_migrations can get corrupted (missing entries + dirty flags) after failed
+# deploys. Each "already exists" failure marks the migration dirty and exits.
+# We force the dirty version clean and retry until migrate up succeeds, ensuring
+# truly new migrations (INSERT-only, not CREATE TABLE) still run normally.
 echo "→ Running database migrations..."
-./auth7 migrate up
+MIGRATION_ATTEMPTS=0
+while [ "$MIGRATION_ATTEMPTS" -lt 100 ]; do
+  # Force any dirty migration clean before attempting migrate up.
+  DIRTY_VER=$(psql "$AUTH7_DB_URL" -tAc \
+    "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" \
+    2>/dev/null | tr -d '[:space:]' || echo "")
+  if [ -n "$DIRTY_VER" ]; then
+    echo "  → Forcing dirty migration ${DIRTY_VER} clean..."
+    ./auth7 migrate force "$DIRTY_VER" 2>/dev/null || \
+      psql "$AUTH7_DB_URL" -c \
+        "UPDATE schema_migrations SET dirty=false WHERE version=${DIRTY_VER};" \
+      2>/dev/null || true
+  fi
+  MIG_OUT=$(./auth7 migrate up 2>&1)
+  MIG_RC=$?
+  if [ $MIG_RC -eq 0 ]; then
+    break
+  fi
+  # Only retry for "already exists" or dirty-database errors; fail fast otherwise.
+  echo "$MIG_OUT" | grep -qE "already exists|Dirty database" || { echo "$MIG_OUT"; exit 1; }
+  MIGRATION_ATTEMPTS=$((MIGRATION_ATTEMPTS + 1))
+done
+if [ "$MIGRATION_ATTEMPTS" -ge 100 ]; then
+  echo "→ ERROR: migrations did not converge after 100 attempts"
+  exit 1
+fi
 echo "→ Migrations done."
 
 if [ -n "$DATABASE_ADMIN_URL" ] && [ -f scripts/seed-data.sql ]; then
