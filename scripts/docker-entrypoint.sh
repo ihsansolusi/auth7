@@ -31,9 +31,17 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations;" 2>/dev/null || true
     echo "→ DB reset complete."
   else
-    # Fix dirty migration state from any previous failed deploy.
-    # Use `migrate force VERSION` instead of DELETE to avoid re-applying the migration
-    # (DELETE causes golang-migrate to retry the migration, failing if tables already exist).
+    # Pre-populate schema_migrations for all migration files that exist on disk.
+    # This handles the case where schema_migrations lost entries (e.g. after a reset)
+    # but the tables themselves already exist. Without this, golang-migrate would try
+    # to re-apply old migrations and fail with "relation already exists".
+    echo "→ Syncing schema_migrations with migration files on disk..."
+    for f in migrations/*.up.sql; do
+      [ -f "$f" ] || continue
+      ver=$(basename "$f" | sed 's/_.*//')
+      psql "$AUTH7_DB_URL" -c "INSERT INTO schema_migrations (version, dirty) VALUES ($ver, false) ON CONFLICT DO NOTHING;" 2>/dev/null || true
+    done
+    # Fix any remaining dirty entries using migrate force (marks clean without re-running).
     DIRTY_VERSION=$(psql "$AUTH7_DB_URL" -tAc "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" 2>/dev/null | tr -d '[:space:]' || echo "")
     if [ -n "$DIRTY_VERSION" ]; then
       echo "→ Repairing dirty migration state (version ${DIRTY_VERSION})..."
