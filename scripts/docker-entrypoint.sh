@@ -39,7 +39,7 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     for f in migrations/*.up.sql; do
       [ -f "$f" ] || continue
       ver=$(basename "$f" | sed 's/_.*//')
-      psql "$AUTH7_DB_URL" -c "INSERT INTO schema_migrations (version, dirty) VALUES ($ver, false) ON CONFLICT DO NOTHING;" 2>/dev/null || true
+      psql "$AUTH7_DB_URL" -c "INSERT INTO schema_migrations (version, dirty) VALUES ($ver, false) ON CONFLICT (version) DO UPDATE SET dirty=false;" 2>/dev/null || true
     done
     # Fix any remaining dirty entries using migrate force (marks clean without re-running).
     DIRTY_VERSION=$(psql "$AUTH7_DB_URL" -tAc "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" 2>/dev/null | tr -d '[:space:]' || echo "")
