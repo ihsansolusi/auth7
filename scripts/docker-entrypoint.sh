@@ -31,11 +31,14 @@ if [ -n "$DATABASE_ADMIN_URL" ]; then
     psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations;" 2>/dev/null || true
     echo "→ DB reset complete."
   else
-    # Fix dirty migration state from any previous failed deploy
-    DIRTY=$(psql "$AUTH7_DB_URL" -tAc "SELECT COUNT(*) FROM schema_migrations WHERE dirty=true" 2>/dev/null || echo "0")
-    if [ "$DIRTY" != "0" ] && [ -n "$DIRTY" ]; then
-      echo "→ Repairing dirty migration state (${DIRTY} entry)..."
-      psql "$AUTH7_DB_URL" -c "DELETE FROM schema_migrations WHERE dirty=true;" 2>/dev/null || true
+    # Fix dirty migration state from any previous failed deploy.
+    # Use `migrate force VERSION` instead of DELETE to avoid re-applying the migration
+    # (DELETE causes golang-migrate to retry the migration, failing if tables already exist).
+    DIRTY_VERSION=$(psql "$AUTH7_DB_URL" -tAc "SELECT version FROM schema_migrations WHERE dirty=true LIMIT 1" 2>/dev/null | tr -d '[:space:]' || echo "")
+    if [ -n "$DIRTY_VERSION" ]; then
+      echo "→ Repairing dirty migration state (version ${DIRTY_VERSION})..."
+      ./auth7 migrate force "$DIRTY_VERSION" 2>/dev/null || \
+        psql "$AUTH7_DB_URL" -c "UPDATE schema_migrations SET dirty=false WHERE version=${DIRTY_VERSION};" 2>/dev/null || true
     fi
   fi
   echo "→ Database ready."
