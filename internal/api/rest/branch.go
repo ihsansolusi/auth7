@@ -315,16 +315,24 @@ func (s *Server) handleSwitchBranch(c *gin.Context) {
 	}
 
 	newSessionID := uuid.New().String()
-	newAccessToken, _, err := jwtSvc.IssueAccessToken(newSessionID, userID, orgID, newClaims)
+	newAccessToken, accessTokenMeta, err := jwtSvc.IssueAccessToken(newSessionID, userID, orgID, newClaims)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue new token"})
 		return
 	}
 
+	expiresIn := 900
+	if accessTokenMeta != nil {
+		expiresIn = int(time.Until(accessTokenMeta.ExpiresAt).Seconds())
+		if expiresIn < 0 {
+			expiresIn = 0
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": newAccessToken,
 		"token_type":   "Bearer",
-		"expires_in":   900,
+		"expires_in":   expiresIn,
 		"branch_id":    branchID.String(),
 		"switched_at":  time.Now().UTC().Format(time.RFC3339),
 	})
