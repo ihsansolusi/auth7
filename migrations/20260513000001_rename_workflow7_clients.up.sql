@@ -1,3 +1,6 @@
+-- Clear stale auth codes referencing old client IDs (safe: these codes are expired)
+DELETE FROM oauth2_authorization_codes WHERE client_id IN ('workflow7-web', 'workflow7-svc');
+
 -- Rename workflow7-web → bos7-workflow (web client)
 UPDATE oauth2_clients
 SET

@@ -126,6 +126,8 @@ INSERT INTO user_roles (id, user_id, role_id, branch_id, org_id, granted_by, gra
 VALUES
     ('00000000-0000-0000-0000-000000000801', '00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000601', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
     ('00000000-0000-0000-0000-000000000802', '00000000-0000-0000-0000-000000000402', '00000000-0000-0000-0000-000000000602', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
+    -- john.doe also has branch_manager access at KC-JKT-001 (for multi-branch switch testing)
+    ('00000000-0000-0000-0000-000000000805', '00000000-0000-0000-0000-000000000402', '00000000-0000-0000-0000-000000000602', '00000000-0000-0000-0000-000000000202', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
     ('00000000-0000-0000-0000-000000000803', '00000000-0000-0000-0000-000000000403', '00000000-0000-0000-0000-000000000603', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
     ('00000000-0000-0000-0000-000000000804', '00000000-0000-0000-0000-000000000404', '00000000-0000-0000-0000-000000000604', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW())
 ON CONFLICT (id) DO NOTHING;
@@ -169,6 +171,37 @@ ON CONFLICT (id) DO UPDATE SET
     client_secret_hash   = EXCLUDED.client_secret_hash;
 
 -- ──────────────────────────────────────────────
+-- 10a. Workflow Test Users (wf.* — password: Workflow7!2026)
+-- Used for end-to-end workflow notification testing:
+--   wf.teller     → submits task (teller role, KC-BDG-001)
+--   wf.supervisor → approves task (supervisor role, KC-BDG-001)
+--   wf.manager    → branch manager, multi-branch (KC-BDG-001 + KC-JKT-001)
+-- ──────────────────────────────────────────────
+INSERT INTO users (id, org_id, email, username, full_name, status, email_verified, mfa_enabled)
+VALUES
+    ('00000000-0000-0000-0001-000000000001', '00000000-0000-0000-0000-000000000001', 'wf.teller@bank.co.id',     'wf.teller',     'WF Teller',    'active', true, false),
+    ('00000000-0000-0000-0001-000000000002', '00000000-0000-0000-0000-000000000001', 'wf.supervisor@bank.co.id', 'wf.supervisor', 'WF Supervisor', 'active', true, false),
+    ('00000000-0000-0000-0001-000000000003', '00000000-0000-0000-0000-000000000001', 'wf.manager@bank.co.id',    'wf.manager',    'WF Manager',    'active', true, false)
+ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, full_name = EXCLUDED.full_name;
+
+-- Argon2id hash for "Workflow7!2026"
+INSERT INTO user_credentials (id, user_id, credential_type, secret_hash, version, is_current)
+VALUES
+    ('00000000-0000-0000-0001-000000000501', '00000000-0000-0000-0001-000000000001', 'password', '$argon2id$v=19$m=65536,t=3,p=4$TEmtMpHZDUNaMDsks2QdGQ$qmjIQ7rPCS3U9MzCBCmuvRh6ieAvcHDgySf+gtB9tto', 1, true),
+    ('00000000-0000-0000-0001-000000000502', '00000000-0000-0000-0001-000000000002', 'password', '$argon2id$v=19$m=65536,t=3,p=4$TKjWf84JmCrrxESW1oXL0A$V+iMw5K0dJMSJ40DWs4oYjV7kVGyToNd/lAP8FZhF0U', 1, true),
+    ('00000000-0000-0000-0001-000000000503', '00000000-0000-0000-0001-000000000003', 'password', '$argon2id$v=19$m=65536,t=3,p=4$TKjWf84JmCrrxESW1oXL0A$V+iMw5K0dJMSJ40DWs4oYjV7kVGyToNd/lAP8FZhF0U', 1, true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO user_roles (id, user_id, role_id, branch_id, org_id, granted_by, granted_at)
+VALUES
+    ('00000000-0000-0000-0001-000000000801', '00000000-0000-0000-0001-000000000001', '00000000-0000-0000-0000-000000000604', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
+    ('00000000-0000-0000-0001-000000000802', '00000000-0000-0000-0001-000000000002', '00000000-0000-0000-0000-000000000603', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
+    -- wf.manager has branch_manager at both KC-BDG-001 and KC-JKT-001 (for switch-branch testing)
+    ('00000000-0000-0000-0001-000000000803', '00000000-0000-0000-0001-000000000003', '00000000-0000-0000-0000-000000000602', '00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW()),
+    ('00000000-0000-0000-0001-000000000804', '00000000-0000-0000-0001-000000000003', '00000000-0000-0000-0000-000000000602', '00000000-0000-0000-0000-000000000202', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000401', NOW())
+ON CONFLICT (id) DO NOTHING;
+
+-- ──────────────────────────────────────────────
 -- 10. MFA Configs (for users with MFA enabled)
 -- ──────────────────────────────────────────────
 INSERT INTO mfa_configs (id, user_id, is_totp_enabled, is_email_otp_enabled, is_backup_codes_enabled, mfa_enabled_at)
@@ -180,18 +213,22 @@ ON CONFLICT (id) DO NOTHING;
 -- ──────────────────────────────────────────────
 -- Summary
 -- ──────────────────────────────────────────────
--- Users:
+-- Users (Password123! unless noted):
 --   - admin@bank-demo.co.id / Password123! (super_admin, all permissions)
---   - john@bank-demo.co.id / Password123! (branch_manager)
+--   - john@bank-demo.co.id / Password123! (branch_manager, KC-BDG-001 + KC-JKT-001)
 --   - jane@bank-demo.co.id / Password123! (supervisor, MFA enabled)
 --   - teller@bank-demo.co.id / Password123! (teller)
+-- Workflow Test Users (Workflow7!2026):
+--   - wf.teller@bank.co.id     / Workflow7!2026 (teller, KC-BDG-001)
+--   - wf.supervisor@bank.co.id / Workflow7!2026 (supervisor, KC-BDG-001)
+--   - wf.manager@bank.co.id    / Workflow7!2026 (branch_manager, KC-BDG-001 + KC-JKT-001)
 --
 -- OAuth2 Clients (web — 3 redirect_uris per app: localhost, bos7.local, dev.ihsansolusi.co.id):
---   - bos7-portal, workflow7-web, auth7-ui-dev, bos7-template, bos7-enterprise
+--   - bos7-portal, bos7-workflow, auth7-ui-dev, bos7-template (no app_url), bos7-enterprise
 --   - bos7-financing, bos7-funding, bos7-treasury, bos7-smt, bos7-accounting
 --   - bos7-cif, bos7-internalaccount, bos7-remittance, bos7-batchprocessing
 -- OAuth2 Clients (machine / native):
---   - core7-api, workflow7-svc, notif7-svc (M2M)
+--   - core7-api, workflow7, notif7-svc (M2M)
 --   - mobile-app (native, public)
 --
 -- Branches:
