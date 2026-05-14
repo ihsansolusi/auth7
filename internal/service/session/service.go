@@ -251,6 +251,10 @@ func (s *Service) GetSession(ctx context.Context, sessionID string) (*SessionDat
 	return s.sessionStore.Get(ctx, sessionID)
 }
 
+func (s *Service) ListAllSessions(ctx context.Context) ([]*SessionData, error) {
+	return s.sessionStore.ListAll(ctx)
+}
+
 // StoreSession persists a minimal session entry so it can be found and revoked by RevokeAllUserSessions.
 // Used by PKCE token exchange where no full login flow occurs.
 func (s *Service) StoreSession(ctx context.Context, sessionID, userID, orgID string) error {
