@@ -12,6 +12,7 @@ import (
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
+	sessionpkg "github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 )
 
@@ -64,6 +65,10 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 	adminpkg.NewFacadeHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	// UserRoleHandler excluded: its /users/:user_id/* path conflicts with UserHandler's /users/:id/*
 	adminpkg.NewAuditHandler(auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
+
+	if sessionSvc, ok := s.deps.SessionSvc.(*sessionpkg.Service); ok {
+		adminpkg.NewSessionHandler(sessionSvc, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
+	}
 
 	adminV1.GET("/dashboard/stats", s.handleAdminStats(store))
 }

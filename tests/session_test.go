@@ -56,7 +56,7 @@ func TestRotatedKeyManager(t *testing.T) {
 }
 
 func TestJWTSigningAndVerification(t *testing.T) {
-	svc := jwt.NewService("auth7.test", []string{"auth7"})
+	svc := jwt.NewService("auth7.test", []string{"auth7"}, 15*time.Minute)
 
 	userID := uuid.New()
 	orgID := uuid.New()
@@ -104,7 +104,7 @@ func TestTokenHashing(t *testing.T) {
 }
 
 func TestAccessTokenExpiration(t *testing.T) {
-	svc := jwt.NewService("auth7.test", []string{"auth7"})
+	svc := jwt.NewService("auth7.test", []string{"auth7"}, 15*time.Minute)
 
 	userID := uuid.New()
 	orgID := uuid.New()

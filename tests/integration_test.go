@@ -161,7 +161,7 @@ func TestNotif7Client_SendMfaReset(t *testing.T) {
 }
 
 func TestJWTTokenGeneration(t *testing.T) {
-	svc := jwt.NewService("auth7.test", []string{"auth7.test"})
+	svc := jwt.NewService("auth7.test", []string{"auth7.test"}, 15*time.Minute)
 
 	sessionID := "session-123"
 	userID := uuid.New()
@@ -183,7 +183,7 @@ func TestJWTTokenGeneration(t *testing.T) {
 }
 
 func TestJWTTokenVerification(t *testing.T) {
-	svc := jwt.NewService("auth7.test", []string{"auth7.test"})
+	svc := jwt.NewService("auth7.test", []string{"auth7.test"}, 15*time.Minute)
 
 	sessionID := "session-123"
 	userID := uuid.New()

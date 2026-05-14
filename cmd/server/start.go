@@ -166,7 +166,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		logger.Info().Msg("NATS event streaming disabled")
 	}
 
-	jwtSvc := jwt.NewService(cfg.Service.Name, []string{cfg.Service.Name})
+	jwtSvc := jwt.NewService(cfg.Service.Name, []string{cfg.Service.Name}, cfg.Token.Duration)
 	sessionStore := session.NewStore(redisClient, 8*time.Hour)
 	refreshTokenStore := session.NewRefreshTokenStore(redisClient)
 	blacklistStore := session.NewBlacklistStore(redisClient)

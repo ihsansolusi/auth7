@@ -248,6 +248,31 @@ func (s *Store) GetIDsByUser(ctx context.Context, userID string) ([]string, erro
 	return ids, nil
 }
 
+func (s *Store) ListAll(ctx context.Context) ([]*SessionData, error) {
+	const op = "session.Store.ListAll"
+
+	var sessions []*SessionData
+	iter := s.redis.Scan(ctx, 0, "session:*", 100).Iterator()
+
+	for iter.Next(ctx) {
+		data, err := s.redis.Get(ctx, iter.Val()).Bytes()
+		if err != nil {
+			continue
+		}
+		var session SessionData
+		if err := json.Unmarshal(data, &session); err != nil {
+			continue
+		}
+		sessions = append(sessions, &session)
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	return sessions, nil
+}
+
 func (s *Store) DeleteByOrg(ctx context.Context, orgID string) error {
 	const op = "session.Store.DeleteByOrg"
 

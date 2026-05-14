@@ -37,19 +37,25 @@ type AccessToken struct {
 }
 
 type Service struct {
-	keyManager *RotatedKeyManager
-	issuer    string
-	audience  []string
+	keyManager  *RotatedKeyManager
+	issuer      string
+	audience    []string
+	tokenTTL    time.Duration
 }
 
-func NewService(issuer string, audience []string) *Service {
+func NewService(issuer string, audience []string, tokenTTL time.Duration) *Service {
 	km := NewRotatedKeyManager()
 	km.GenerateNewKey()
+
+	if tokenTTL <= 0 {
+		tokenTTL = 15 * time.Minute
+	}
 
 	return &Service{
 		keyManager: km,
 		issuer:     issuer,
 		audience:   audience,
+		tokenTTL:   tokenTTL,
 	}
 }
 
@@ -69,7 +75,7 @@ func (s *Service) IssueAccessToken(sessionID string, userID, orgID uuid.UUID, cl
 			Audience:  s.audience,
 			ID:        tokenID,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.tokenTTL)),
 		},
 		SessionID: sessionID,
 		OrgID:     orgID.String(),
@@ -94,7 +100,7 @@ func (s *Service) IssueAccessToken(sessionID string, userID, orgID uuid.UUID, cl
 		UserID:    userID,
 		OrgID:     orgID,
 		ClientID:  claims.ClientID,
-		ExpiresAt: now.Add(15 * time.Minute),
+		ExpiresAt: now.Add(s.tokenTTL),
 		IssuedAt:  now,
 	}
 
