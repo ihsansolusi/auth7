@@ -105,6 +105,9 @@ func (h *BranchHandler) RegisterBranchRoutes(r *gin.RouterGroup) {
 func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(400, gin.H{"error": "org_id required"})
 		return
 	}
@@ -122,6 +125,9 @@ func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {
 
 func (h *BranchHandler) handleCreateBranchType(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(400, gin.H{"error": "org_id required"})
 		return
@@ -149,6 +155,9 @@ func (h *BranchHandler) handleCreateBranchType(c *gin.Context) {
 func (h *BranchHandler) handleGetBranchType(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(400, gin.H{"error": "org_id required"})
 		return
 	}
@@ -167,6 +176,9 @@ func (h *BranchHandler) handleGetBranchType(c *gin.Context) {
 
 func (h *BranchHandler) handleUpdateBranchType(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(400, gin.H{"error": "org_id required"})
 		return
@@ -196,6 +208,9 @@ func (h *BranchHandler) handleUpdateBranchType(c *gin.Context) {
 
 func (h *BranchHandler) handleDeleteBranchType(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(400, gin.H{"error": "org_id required"})
 		return

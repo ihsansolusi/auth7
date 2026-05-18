@@ -29,6 +29,7 @@ type Store struct {
 	OAuth2ClientRepository     *OAuth2ClientRepository
 	OAuth2AuthCodeRepository   *OAuth2AuthCodeRepository
 	UserBranchAssignmentRepository *UserBranchAssignmentRepository
+	BranchTypeRepository           *BranchTypeRepository
 }
 
 func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
@@ -47,6 +48,7 @@ func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
 	s.OAuth2ClientRepository = &OAuth2ClientRepository{pool: pool}
 	s.OAuth2AuthCodeRepository = &OAuth2AuthCodeRepository{pool: pool}
 	s.UserBranchAssignmentRepository = &UserBranchAssignmentRepository{pool: pool}
+	s.BranchTypeRepository = &BranchTypeRepository{pool: pool}
 	return s
 }
 

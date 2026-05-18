@@ -75,6 +75,9 @@ func (h *OAuth2ClientHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
 	orgStr := c.Query("org_id")
 	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
+	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
 	}
@@ -96,6 +99,9 @@ func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
 
 func (h *OAuth2ClientHandler) handleCreateClient(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return
@@ -140,6 +146,9 @@ func (h *OAuth2ClientHandler) handleGetClient(c *gin.Context) {
 
 func (h *OAuth2ClientHandler) handleUpdateClient(c *gin.Context) {
 	orgStr := c.Query("org_id")
+	if orgStr == "" {
+		orgStr = claimsOrgID(c)
+	}
 	if orgStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
 		return

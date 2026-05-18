@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS branch_default_roles;

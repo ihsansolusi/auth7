@@ -102,7 +102,7 @@ func (s *PGStore) List(ctx context.Context, filter domain.AuditLogFilter) ([]*do
 
 	q := fmt.Sprintf(`
 		SELECT id, org_id, actor_id, actor_email, action, resource_type,
-			resource_id, old_value, new_value, ip_address, user_agent, created_at
+			resource_id, old_value, new_value, ip_address::text, user_agent, created_at
 		FROM audit_logs WHERE 1=1%s
 		ORDER BY created_at DESC
 		LIMIT $%d OFFSET $%d
