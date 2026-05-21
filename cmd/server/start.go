@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -18,6 +19,7 @@ import (
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
 	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	"github.com/ihsansolusi/auth7/internal/service"
+	"github.com/ihsansolusi/auth7/internal/service/branchsync"
 	"github.com/ihsansolusi/auth7/internal/service/opacache"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
@@ -268,6 +270,38 @@ func runStart(cmd *cobra.Command, args []string) error {
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	// ─── Branch sync poller ─────────────────────────────────────────────────
+	// Pulls /v1/source-contracts/branches from core7-service-enterprise and
+	// upserts into auth7.branches. Disabled when ENTERPRISE_SOURCE_URL or ENTERPRISE_CLIENT_ID are empty.
+	{
+		pollerCfg := branchsync.DefaultConfig()
+		pollerCfg.SourceURL    = os.Getenv("ENTERPRISE_SOURCE_URL")
+		pollerCfg.ClientID     = os.Getenv("ENTERPRISE_CLIENT_ID")
+		pollerCfg.ClientSecret = os.Getenv("ENTERPRISE_CLIENT_SECRET")
+		pollerCfg.TokenEndpoint = os.Getenv("AUTH7_TOKEN_URL")
+		if pollerCfg.TokenEndpoint == "" {
+			pollerCfg.TokenEndpoint = "http://localhost:4445/oauth2/token"
+		}
+		if v := os.Getenv("ENTERPRISE_TENANT_ORG_ID"); v != "" {
+			if u, err := uuid.Parse(v); err == nil {
+				pollerCfg.OrgID = u
+			} else {
+				logger.Warn().Err(err).Str("value", v).Msg("ENTERPRISE_TENANT_ORG_ID invalid uuid, using default")
+			}
+		}
+		if v := os.Getenv("ENTERPRISE_POLL_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				pollerCfg.Interval = d
+			}
+		}
+		poller := branchsync.NewPoller(pollerCfg, primaryPool, logger)
+		go func() {
+			if err := poller.Run(ctx); err != nil {
+				logger.Error().Err(err).Msg("branch sync poller exited with error")
+			}
+		}()
 	}
 
 	serverErr := make(chan error, 1)
