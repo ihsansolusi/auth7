@@ -1,0 +1,11 @@
+# Extracted Oracle data — may contain user PII
+csv/
+
+# Generated SQL — re-emit from CSV anytime
+seed_001_organization.sql
+seed_002_branches.sql
+seed_003_roles.sql
+seed_004_users.sql
+
+# Local connection config
+.env.seed
