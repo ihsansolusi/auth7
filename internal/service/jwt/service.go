@@ -12,17 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+// ActClaim holds the RFC 8693 actor identity embedded in delegated tokens.
+type ActClaim struct {
+	Sub string `json:"sub,omitempty"`
+}
+
 type Claims struct {
 	jwt.RegisteredClaims
-	SessionID   string   `json:"sid,omitempty"`
-	OrgID       string   `json:"org_id,omitempty"`
-	ClientID    string   `json:"client_id,omitempty"`
-	Username    string   `json:"preferred_username,omitempty"`
-	Email       string   `json:"email,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
-	Scope       string   `json:"scope,omitempty"`
-	BranchID    string   `json:"branch_id,omitempty"`
+	SessionID   string    `json:"sid,omitempty"`
+	OrgID       string    `json:"org_id,omitempty"`
+	ClientID    string    `json:"client_id,omitempty"`
+	Username    string    `json:"preferred_username,omitempty"`
+	Email       string    `json:"email,omitempty"`
+	Roles       []string  `json:"roles,omitempty"`
+	Permissions []string  `json:"permissions,omitempty"`
+	Scope       string    `json:"scope,omitempty"`
+	BranchID    string    `json:"branch_id,omitempty"`
+	Act         *ActClaim `json:"act,omitempty"`
 }
 
 
@@ -85,6 +91,7 @@ func (s *Service) IssueAccessToken(sessionID string, userID, orgID uuid.UUID, cl
 		Roles:     claims.Roles,
 		Scope:     claims.Scope,
 		BranchID:  claims.BranchID,
+		Act:       claims.Act,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims)

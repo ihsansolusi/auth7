@@ -255,6 +255,8 @@ func (s *Server) handleToken(c *gin.Context) {
 	switch grantType {
 	case "authorization_code":
 		s.handleTokenExchange(c)
+	case "urn:ietf:params:oauth:grant-type:token-exchange":
+		s.handleDelegatedTokenExchange(c)
 	case "refresh_token":
 		s.handleTokenRefresh(c)
 	case "client_credentials":
@@ -262,6 +264,55 @@ func (s *Server) handleToken(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_grant_type"})
 	}
+}
+
+// handleDelegatedTokenExchange implements RFC 8693 token exchange for BFF.
+// It verifies the subject_token, then issues a new RS256 token with act.sub
+// set to the original user_id. Downstream services use this claim to satisfy
+// RequireDelegatedAuth().
+func (s *Server) handleDelegatedTokenExchange(c *gin.Context) {
+	subjectToken := c.PostForm("subject_token")
+	clientID, clientSecret, ok := parseBasicAuth(c.GetHeader("Authorization"))
+	if !ok {
+		clientID = c.PostForm("client_id")
+		clientSecret = c.PostForm("client_secret")
+	}
+	if subjectToken == "" || clientID == "" || clientSecret == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+	if s.deps.OAuth2ClientSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+	client, err := s.deps.OAuth2ClientSvc.GetByClientID(c.Request.Context(), clientID)
+	if err != nil || !client.IsActive || !verifyClientSecret(clientSecret, client.ClientSecretHash) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid_client"})
+		return
+	}
+
+	sessionSvc, ok := s.deps.SessionSvc.(*session.Service)
+	if !ok || sessionSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_error"})
+		return
+	}
+
+	delegatedToken, err := sessionSvc.IssueDelegatedAccessToken(c.Request.Context(), subjectToken)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "error_description": "subject_token invalid or expired"})
+		return
+	}
+
+	scope := c.PostForm("scope")
+	if scope == "" {
+		scope = "openid profile"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": delegatedToken,
+		"token_type":   "Bearer",
+		"expires_in":   900,
+		"scope":        scope,
+	})
 }
 
 // handleTokenExchange — POST /oauth2/token grant_type=authorization_code

@@ -74,13 +74,13 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	const op = "postgres.UserRepository.Create"
 	q := `
 		INSERT INTO users (
-			id, org_id, username, email, full_name, status,
+			id, org_id, username, email, full_name, preferred_locale, status,
 			email_verified, mfa_enabled, mfa_method, mfa_reset_required,
 			require_password_change, failed_login_attempts, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	_, err := r.pool.Exec(ctx, q,
-		user.ID, user.OrgID, user.Username, user.Email, user.FullName, user.Status,
+		user.ID, user.OrgID, user.Username, user.Email, user.FullName, user.PreferredLocale, user.Status,
 		user.EmailVerified, user.MFAEnabled, user.MFAMethod, user.MFAResetRequired,
 		user.RequirePasswordChange, user.FailedLoginAttempts, user.CreatedAt, user.UpdatedAt,
 	)
@@ -94,6 +94,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	const op = "postgres.UserRepository.GetByID"
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
+			preferred_locale,
 			email_verified, mfa_enabled, mfa_method, mfa_reset_required,
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
@@ -105,6 +106,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
+		&user.PreferredLocale,
 		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
 		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
@@ -126,6 +128,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, use
 	const op = "postgres.UserRepository.GetByUsername"
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
+			preferred_locale,
 			email_verified, mfa_enabled, mfa_method, mfa_reset_required,
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
@@ -137,6 +140,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, use
 	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, orgID, username).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
+		&user.PreferredLocale,
 		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
 		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
@@ -158,6 +162,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, orgID uuid.UUID, email 
 	const op = "postgres.UserRepository.GetByEmail"
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
+			preferred_locale,
 			email_verified, mfa_enabled, mfa_method, mfa_reset_required,
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
@@ -169,6 +174,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, orgID uuid.UUID, email 
 	var lastLoginIP pgtype.Text
 	err := r.pool.QueryRow(ctx, q, orgID, email).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
+		&user.PreferredLocale,
 		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 		&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
 		&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,
@@ -190,15 +196,15 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	const op = "postgres.UserRepository.Update"
 	q := `
 		UPDATE users SET
-			username = $2, email = $3, full_name = $4, status = $5,
-			email_verified = $6, mfa_enabled = $7, mfa_method = $8, mfa_reset_required = $9,
-			require_password_change = $10, failed_login_attempts = $11, locked_until = $12,
-			last_login_at = $13, last_login_ip = nullif($14, '')::inet, password_changed_at = $15,
-			updated_at = $16, updated_by = $17
+			username = $2, email = $3, full_name = $4, preferred_locale = $5, status = $6,
+			email_verified = $7, mfa_enabled = $8, mfa_method = $9, mfa_reset_required = $10,
+			require_password_change = $11, failed_login_attempts = $12, locked_until = $13,
+			last_login_at = $14, last_login_ip = nullif($15, '')::inet, password_changed_at = $16,
+			updated_at = $17, updated_by = $18
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	_, err := r.pool.Exec(ctx, q,
-		user.ID, user.Username, user.Email, user.FullName, user.Status,
+		user.ID, user.Username, user.Email, user.FullName, user.PreferredLocale, user.Status,
 		user.EmailVerified, user.MFAEnabled, user.MFAMethod, user.MFAResetRequired,
 		user.RequirePasswordChange, user.FailedLoginAttempts, user.LockedUntil,
 		user.LastLoginAt, user.LastLoginIP, user.PasswordChangedAt,
@@ -230,6 +236,7 @@ func (r *UserRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, limit, 
 
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
+			preferred_locale,
 			email_verified, mfa_enabled, mfa_method, mfa_reset_required,
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
@@ -251,6 +258,7 @@ func (r *UserRepository) ListByOrg(ctx context.Context, orgID uuid.UUID, limit, 
 		var lastLoginIP pgtype.Text
 		if err := rows.Scan(
 			&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
+			&user.PreferredLocale,
 			&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
 			&user.RequirePasswordChange, &user.FailedLoginAttempts, &user.LockedUntil,
 			&user.LastLoginAt, &lastLoginIP, &user.PasswordChangedAt,

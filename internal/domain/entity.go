@@ -35,6 +35,7 @@ type User struct {
 	Username               string     `json:"username"`
 	Email                  string     `json:"email"`
 	FullName               string     `json:"full_name"`
+	PreferredLocale        string     `json:"preferred_locale"`
 	Status                 UserStatus `json:"status"`
 	EmailVerified          bool       `json:"email_verified"`
 	MFAEnabled             bool       `json:"mfa_enabled"`
@@ -70,6 +71,13 @@ func (u *User) Validate() error {
 
 	if len(u.FullName) < 1 || len(u.FullName) > 255 {
 		errs = append(errs, "full_name must be between 1 and 255 characters")
+	}
+
+	if u.PreferredLocale == "" {
+		u.PreferredLocale = "id"
+	}
+	if u.PreferredLocale != "id" && u.PreferredLocale != "en" {
+		errs = append(errs, "preferred_locale must be one of: id, en")
 	}
 
 	switch u.Status {

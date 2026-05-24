@@ -120,6 +120,7 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 		Username:               req.Username,
 		Email:                  email,
 		FullName:               req.FullName,
+		PreferredLocale:        "id",
 		Status:                 domain.UserStatusPendingVerification,
 		EmailVerified:          false,
 		MFAEnabled:             false,
@@ -387,6 +388,7 @@ func (h *AuthHandler) HandleMe(c *gin.Context) {
 		"username":          user.Username,
 		"email":             user.Email,
 		"full_name":         user.FullName,
+		"preferred_locale":  user.PreferredLocale,
 		"status":            user.Status,
 		"org_id":            user.OrgID.String(),
 		"email_verified":    user.EmailVerified,
@@ -396,8 +398,9 @@ func (h *AuthHandler) HandleMe(c *gin.Context) {
 }
 
 type UpdateProfileRequest struct {
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
+	FullName        string `json:"full_name"`
+	Email           string `json:"email"`
+	PreferredLocale string `json:"preferred_locale"`
 }
 
 func (h *AuthHandler) HandleUpdateProfile(c *gin.Context) {
@@ -437,6 +440,13 @@ func (h *AuthHandler) HandleUpdateProfile(c *gin.Context) {
 	if req.Email != "" {
 		user.Email = req.Email
 	}
+	if req.PreferredLocale != "" {
+		if req.PreferredLocale != "id" && req.PreferredLocale != "en" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "preferred_locale must be one of: id, en"})
+			return
+		}
+		user.PreferredLocale = req.PreferredLocale
+	}
 	user.UpdatedAt = time.Now()
 	if err := h.store.UserRepository.Update(c.Request.Context(), user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update_failed", "message": "Gagal memperbarui profil"})
@@ -447,6 +457,7 @@ func (h *AuthHandler) HandleUpdateProfile(c *gin.Context) {
 		"username":       user.Username,
 		"email":          user.Email,
 		"full_name":      user.FullName,
+		"preferred_locale": user.PreferredLocale,
 		"status":         user.Status,
 		"org_id":         user.OrgID.String(),
 		"email_verified": user.EmailVerified,

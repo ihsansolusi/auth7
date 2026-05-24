@@ -283,6 +283,39 @@ func (s *Service) VerifyAccessToken(ctx context.Context, accessToken string) (*j
 	return claims, nil
 }
 
+// IssueDelegatedAccessToken verifies subjectToken, then issues a new RS256 token
+// with act.sub = original user_id. This satisfies RequireDelegatedAuth() on
+// downstream services (enterprise, funding) per RFC 8693.
+func (s *Service) IssueDelegatedAccessToken(ctx context.Context, subjectToken string) (string, error) {
+	origClaims, err := s.VerifyAccessToken(ctx, subjectToken)
+	if err != nil {
+		return "", fmt.Errorf("invalid subject_token: %w", err)
+	}
+	userID, err := uuid.Parse(origClaims.Subject)
+	if err != nil {
+		return "", fmt.Errorf("subject_token has non-UUID subject: %w", err)
+	}
+	orgID := uuid.Nil
+	if origClaims.OrgID != "" {
+		if id, parseErr := uuid.Parse(origClaims.OrgID); parseErr == nil {
+			orgID = id
+		}
+	}
+	delegatedClaims := jwt.Claims{
+		SessionID: origClaims.SessionID,
+		ClientID:  origClaims.ClientID,
+		Roles:     origClaims.Roles,
+		Scope:     origClaims.Scope,
+		BranchID:  origClaims.BranchID,
+		Act:       &jwt.ActClaim{Sub: userID.String()},
+	}
+	token, _, err := s.jwtService.IssueAccessToken(origClaims.SessionID, userID, orgID, delegatedClaims)
+	if err != nil {
+		return "", fmt.Errorf("issue delegated token: %w", err)
+	}
+	return token, nil
+}
+
 func joinScopes(scopes []string) string {
 	return strings.Join(scopes, " ")
 }
