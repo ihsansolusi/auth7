@@ -32,6 +32,7 @@ type CreateClientInput struct {
 	RefreshTokenExpiration  int
 	AllowMultipleTokens     bool
 	SkipConsentScreen       bool
+	ClientSecret            string
 }
 
 type UpdateClientInput struct {

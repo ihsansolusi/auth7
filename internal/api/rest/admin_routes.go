@@ -2,6 +2,8 @@ package rest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
@@ -513,11 +515,18 @@ func (s *adminOAuth2ClientSvc) GetClient(ctx interface{}, id uuid.UUID) (*domain
 	return cl, nil
 }
 
+func adminHashSecret(secret string) string {
+	h := sha256.Sum256([]byte(secret))
+	return base64.StdEncoding.EncodeToString(h[:])
+}
+
 func (s *adminOAuth2ClientSvc) CreateClient(ctx interface{}, orgID uuid.UUID, input adminpkg.CreateClientInput) (*domain.Client, error) {
 	c := ctx.(context.Context)
 	now := time.Now()
+	id := uuid.Must(uuid.NewV7())
 	cl := &domain.Client{
-		ID:                      uuid.Must(uuid.NewV7()),
+		ID:                      id,
+		ClientID:                id.String(),
 		OrgID:                   orgID,
 		Name:                    input.Name,
 		Description:             input.Description,
@@ -533,6 +542,9 @@ func (s *adminOAuth2ClientSvc) CreateClient(ctx interface{}, orgID uuid.UUID, in
 		IsActive:                true,
 		CreatedAt:               now,
 		UpdatedAt:               now,
+	}
+	if input.ClientSecret != "" {
+		cl.ClientSecretHash = adminHashSecret(input.ClientSecret)
 	}
 	return cl, s.store.OAuth2ClientRepository.CreateClient(c, cl)
 }
