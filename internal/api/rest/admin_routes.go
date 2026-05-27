@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -92,6 +93,9 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 	}
 
 	adminV1.GET("/dashboard/stats", s.handleAdminStats(store))
+
+	// DataTable cursor endpoints.
+	adminV1.POST("/apps/query", s.handleAppsQuery(store))
 
 	// Branch default roles — configured defaults per branch (separate from per-user assignments).
 	adminV1.GET("/branches/:id/default-roles", s.handleGetBranchDefaultRoles(store))
@@ -243,6 +247,159 @@ func (s *Server) handleAdminStats(store *postgres.Store) gin.HandlerFunc {
 			"totalBranches":    0,
 			"totalClients":     0,
 			"recentAuditCount": auditTotal,
+		})
+	}
+}
+
+// ── handleAppsQuery — POST /admin/v1/apps/query ───────────────────────────────
+
+func (s *Server) handleAppsQuery(store *postgres.Store) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		const op = "rest.Server.handleAppsQuery"
+		logger := s.deps.Logger.With().Str("op", op).Logger()
+
+		var req DataTableRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			logger.Warn().Err(err).Msg("invalid request body")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			return
+		}
+
+		pageSize := req.PageSize
+		if pageSize <= 0 || pageSize > 100 {
+			pageSize = 20
+		}
+
+		var (
+			conds    []string
+			args     []any
+			orderDir string
+			reversed bool
+		)
+		argIdx := 1
+
+		if req.SearchText != nil && *req.SearchText != "" {
+			conds = append(conds, fmt.Sprintf("name ILIKE '%%' || $%d || '%%'", argIdx))
+			args = append(args, *req.SearchText)
+			argIdx++
+		}
+
+		switch req.ReqType {
+		case "next":
+			if req.BottomData != nil {
+				cID, _ := req.BottomData["id"].(string)
+				cAt, _ := req.BottomData["created_at"].(string)
+				if cID != "" && cAt != "" {
+					conds = append(conds, fmt.Sprintf(
+						"(created_at < $%d::timestamptz OR (created_at = $%d::timestamptz AND id < $%d::uuid))",
+						argIdx, argIdx, argIdx+1,
+					))
+					args = append(args, cAt, cID)
+					argIdx += 2
+				}
+			}
+			orderDir = "DESC"
+		case "prev":
+			if req.TopData != nil {
+				cID, _ := req.TopData["id"].(string)
+				cAt, _ := req.TopData["created_at"].(string)
+				if cID != "" && cAt != "" {
+					conds = append(conds, fmt.Sprintf(
+						"(created_at > $%d::timestamptz OR (created_at = $%d::timestamptz AND id > $%d::uuid))",
+						argIdx, argIdx, argIdx+1,
+					))
+					args = append(args, cAt, cID)
+					argIdx += 2
+				}
+			}
+			orderDir = "ASC"
+			reversed = true
+		default: // "first"
+			orderDir = "DESC"
+		}
+
+		whereClause := ""
+		if len(conds) > 0 {
+			whereClause = "WHERE " + strings.Join(conds, " AND ")
+		}
+
+		query := fmt.Sprintf(`
+			SELECT id, client_id, org_id, name, COALESCE(description, ''),
+			       client_type, token_endpoint_auth_method,
+			       COALESCE(allowed_scopes, '{}'), COALESCE(allowed_redirect_uris, '{}'), COALESCE(allowed_origins, '{}'),
+			       token_expiration, refresh_token_expiration,
+			       allow_multiple_tokens, skip_consent_screen, is_active,
+			       created_at, updated_at,
+			       COALESCE(app_url, ''), COALESCE(icon_name, ''), COALESCE(icon_color, '')
+			FROM oauth2_clients
+			%s
+			ORDER BY created_at %s, id %s
+			LIMIT $%d`, whereClause, orderDir, orderDir, argIdx)
+		args = append(args, pageSize+1)
+
+		rows, err := store.Pool().Query(c.Request.Context(), query, args...)
+		if err != nil {
+			logger.Error().Err(err).Msg("apps query failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			return
+		}
+		defer rows.Close()
+
+		clients := make([]*domain.Client, 0, pageSize+1)
+		for rows.Next() {
+			cl := &domain.Client{}
+			var cType, authMethod, clientIDStr string
+			if err := rows.Scan(
+				&cl.ID, &clientIDStr, &cl.OrgID, &cl.Name, &cl.Description,
+				&cType, &authMethod,
+				&cl.AllowedScopes, &cl.AllowedRedirectURIs, &cl.AllowedOrigins,
+				&cl.TokenExpiration, &cl.RefreshTokenExpiration,
+				&cl.AllowMultipleTokens, &cl.SkipConsentScreen, &cl.IsActive,
+				&cl.CreatedAt, &cl.UpdatedAt,
+				&cl.AppURL, &cl.IconName, &cl.IconColor,
+			); err != nil {
+				logger.Error().Err(err).Msg("apps query scan failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+				return
+			}
+			cl.ClientID = clientIDStr
+			cl.ClientType = domain.ClientType(cType)
+			cl.TokenEndpointAuthMethod = domain.TokenEndpointAuthMethod(authMethod)
+			clients = append(clients, cl)
+		}
+		if err := rows.Err(); err != nil {
+			logger.Error().Err(err).Msg("apps query rows error")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+			return
+		}
+
+		hasExtra := len(clients) > pageSize
+		if hasExtra {
+			clients = clients[:pageSize]
+		}
+
+		if reversed {
+			for i, j := 0, len(clients)-1; i < j; i, j = i+1, j-1 {
+				clients[i], clients[j] = clients[j], clients[i]
+			}
+		}
+
+		allowNext, allowPrev := false, false
+		switch req.ReqType {
+		case "next":
+			allowPrev = true
+			allowNext = hasExtra
+		case "prev":
+			allowNext = true
+			allowPrev = hasExtra
+		default:
+			allowNext = hasExtra
+		}
+
+		c.JSON(http.StatusOK, DataTableResponse{
+			Data:      clients,
+			AllowNext: allowNext,
+			AllowPrev: allowPrev,
 		})
 	}
 }
