@@ -260,16 +260,18 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	roles, _ := h.store.UserRoleRepository.GetRoleCodesByUser(c.Request.Context(), user.ID)
 
-	var branchID string
+	var branchID, branchCode string
 	if primaryBranch, err := h.store.UserBranchAssignmentRepository.GetPrimaryByUserID(c.Request.Context(), user.ID); err == nil && primaryBranch != nil {
 		branchID = primaryBranch.BranchID.String()
+		branchCode = primaryBranch.BranchCode
 	}
 
 	claims := jwt.Claims{
-		Username: user.Username,
-		Email:    user.Email,
-		Roles:    roles,
-		BranchID: branchID,
+		Username:   user.Username,
+		Email:      user.Email,
+		Roles:      roles,
+		BranchID:   branchID,
+		BranchCode: branchCode,
 	}
 
 	result, err := h.sessionSvc.CreateSession(c.Request.Context(), user.ID, orgID, ipAddress, userAgent, claims)

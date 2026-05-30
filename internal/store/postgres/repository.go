@@ -1204,13 +1204,14 @@ func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID
 func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetPrimaryByUserID"
 	q := `
-		SELECT id, user_id, branch_id, is_primary
-		FROM user_branch_assignments
-		WHERE user_id = $1 AND is_primary = true
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.code, '')
+		FROM user_branch_assignments uba
+		LEFT JOIN branches b ON b.id = uba.branch_id
+		WHERE uba.user_id = $1 AND uba.is_primary = true
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
-	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary)
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

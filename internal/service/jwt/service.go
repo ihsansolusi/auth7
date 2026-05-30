@@ -28,6 +28,7 @@ type Claims struct {
 	Permissions []string  `json:"permissions,omitempty"`
 	Scope       string    `json:"scope,omitempty"`
 	BranchID    string    `json:"branch_id,omitempty"`
+	BranchCode  string    `json:"branch_code,omitempty"`
 	Act         *ActClaim `json:"act,omitempty"`
 }
 
@@ -83,15 +84,16 @@ func (s *Service) IssueAccessToken(sessionID string, userID, orgID uuid.UUID, cl
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.tokenTTL)),
 		},
-		SessionID: sessionID,
-		OrgID:     orgID.String(),
-		ClientID:  claims.ClientID,
-		Username:  claims.Username,
-		Email:     claims.Email,
-		Roles:     claims.Roles,
-		Scope:     claims.Scope,
-		BranchID:  claims.BranchID,
-		Act:       claims.Act,
+		SessionID:  sessionID,
+		OrgID:      orgID.String(),
+		ClientID:   claims.ClientID,
+		Username:   claims.Username,
+		Email:      claims.Email,
+		Roles:      claims.Roles,
+		Scope:      claims.Scope,
+		BranchID:   claims.BranchID,
+		BranchCode: claims.BranchCode,
+		Act:        claims.Act,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, accessClaims)
