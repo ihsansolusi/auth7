@@ -441,9 +441,8 @@ func branchToJSON(b *domain.Branch) domain.JSON {
 		return nil
 	}
 	return domain.JSON{
-		"id":   b.ID.String(),
-		"code": b.Code,
-		"name": b.Name,
+		"id":          b.ID.String(),
+		"branch_code": b.BranchCode,
 	}
 }
 

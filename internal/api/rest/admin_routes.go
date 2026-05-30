@@ -112,7 +112,7 @@ func (s *Server) handleGetBranchDefaultRoles(store *postgres.Store) gin.HandlerF
 		}
 
 		var branchName string
-		_ = store.Pool().QueryRow(ctx, `SELECT name FROM branches WHERE id = $1`, branchID).Scan(&branchName)
+		_ = store.Pool().QueryRow(ctx, `SELECT branch_code FROM branches WHERE id = $1`, branchID).Scan(&branchName)
 
 		const q = `
 			SELECT r.id, r.name, COALESCE(bdr.is_default, false) AS is_default

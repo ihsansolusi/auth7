@@ -223,13 +223,11 @@ func (s *Server) handleListUserBranches(c *gin.Context) {
 			"is_primary":  a.IsPrimary,
 			"assigned_at": a.AssignedAt,
 		}
-		// Look up branch code and name from branches table
-		var code, name string
-		err := store.Pool().QueryRow(c.Request.Context(),
-			"SELECT code, name FROM branches WHERE id = $1", a.BranchID).Scan(&code, &name)
-		if err == nil {
-			branchInfo["code"] = code
-			branchInfo["name"] = name
+		// Look up branch_code from branches projection table
+		var branchCode string
+		if err := store.Pool().QueryRow(c.Request.Context(),
+			"SELECT branch_code FROM branches WHERE id = $1", a.BranchID).Scan(&branchCode); err == nil {
+			branchInfo["branch_code"] = branchCode
 		}
 		branches = append(branches, branchInfo)
 	}

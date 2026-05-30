@@ -64,7 +64,7 @@ func (h *FacadeHandler) RegisterRoutes(r *gin.RouterGroup) {
 
 func (h *FacadeHandler) handleContractReadiness(c *gin.Context) {
 	pool := h.store.Pool()
-	readyBranchProjection := tableExists(c.Request.Context(), pool, "branches") && tableExists(c.Request.Context(), pool, "branch_hierarchies")
+	readyBranchProjection := tableExists(c.Request.Context(), pool, "branches")
 	readyEmployeeRef := tableExists(c.Request.Context(), pool, "user_attributes")
 	readyPermission := tableExists(c.Request.Context(), pool, "permissions")
 
@@ -85,10 +85,10 @@ func (h *FacadeHandler) handleBranchProjectionSnapshot(c *gin.Context) {
 	}
 
 	const q = `
-		SELECT id, org_id, branch_type_id, parent_id, code, name, status, updated_at
+		SELECT id, org_id, branch_code, is_active, updated_at
 		FROM branches
-		WHERE org_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		WHERE org_id = $1
+		ORDER BY branch_code ASC
 	`
 	rows, err := h.store.Pool().Query(c.Request.Context(), q, orgID)
 	if err != nil {
@@ -100,30 +100,23 @@ func (h *FacadeHandler) handleBranchProjectionSnapshot(c *gin.Context) {
 	items := make([]gin.H, 0)
 	for rows.Next() {
 		var (
-			branchID     uuid.UUID
-			orgIDVal     uuid.UUID
-			branchTypeID uuid.UUID
-			parentID     *uuid.UUID
-			code         string
-			name         string
-			status       string
-			updatedAt    time.Time
+			branchID   uuid.UUID
+			orgIDVal   uuid.UUID
+			branchCode string
+			isActive   bool
+			updatedAt  time.Time
 		)
-		if err := rows.Scan(&branchID, &orgIDVal, &branchTypeID, &parentID, &code, &name, &status, &updatedAt); err != nil {
+		if err := rows.Scan(&branchID, &orgIDVal, &branchCode, &isActive, &updatedAt); err != nil {
 			h.writeMappedError(c, err)
 			return
 		}
 
 		items = append(items, gin.H{
-			"branch_id":                    branchID.String(),
-			"org_id":                       orgIDVal.String(),
-			"branch_code":                  code,
-			"branch_name":                  name,
-			"branch_status":                status,
-			"branch_type_id":               branchTypeID.String(),
-			"parent_id":                    stringifyUUIDPtr(parentID),
-			"updated_at":                   updatedAt.Format(time.RFC3339),
-			"enterprise_mapping_reference": "pending-source-contract",
+			"branch_id":   branchID.String(),
+			"org_id":      orgIDVal.String(),
+			"branch_code": branchCode,
+			"is_active":   isActive,
+			"updated_at":  updatedAt.Format(time.RFC3339),
 		})
 	}
 

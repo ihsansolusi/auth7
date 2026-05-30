@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
@@ -132,18 +131,13 @@ func (p *Poller) Run(ctx context.Context) error {
 
 // ─── one polling cycle ───────────────────────────────────────────────────────
 
+// branchProjectionItem is the minimal subset of the enterprise branch DTO
+// that auth7 needs for access decisions and JWT branch_code claims.
 type branchProjectionItem struct {
-	BranchID             string `json:"branch_id"`
-	BranchCode           string `json:"branch_code"`
-	BranchName           string `json:"branch_name"`
-	BranchType           string `json:"branch_type"`
-	ParentBranchID       string `json:"parent_branch_id"`
-	AreaID               string `json:"area_id"`
-	BranchClassification string `json:"branch_classification"`
-	Timezone             string `json:"timezone"`
-	OfficeID             string `json:"office_id"`
-	Status               string `json:"status"`
-	UpdatedAt            string `json:"updated_at"`
+	BranchID   string `json:"branch_id"`
+	BranchCode string `json:"branch_code"`
+	Status     string `json:"status"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 type contractEnvelope struct {
@@ -224,7 +218,8 @@ func (p *Poller) fetchPage(ctx context.Context, page int) (*contractEnvelope, er
 }
 
 // upsertBatch performs the UPSERT for the items in a single page using a tx.
-// Returns the number of rows touched.
+// Only the 5 projection columns are stored — branch hierarchy and type live
+// in the enterprise domain.
 func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) (int, error) {
 	const op = "branchsync.Poller.upsertBatch"
 
@@ -234,14 +229,6 @@ func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck — rollback after commit is a no-op
 
-	// Look up the default branch_type_id once per batch. Required by
-	// auth7.branches schema (NOT NULL FK to branch_types).  Falls back to
-	// inserting a "DEFAULT" branch_type if none exists for this org.
-	defaultBranchTypeID, err := p.ensureBranchTypeID(ctx, tx)
-	if err != nil {
-		return 0, err
-	}
-
 	applied := 0
 	for _, item := range items {
 		id, err := uuid.Parse(item.BranchID)
@@ -250,41 +237,17 @@ func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) 
 			continue
 		}
 		isActive := strings.EqualFold(item.Status, "active")
-		status := "active"
-		if !isActive {
-			status = "inactive"
-		}
-
-		var parentID, areaID interface{}
-		if item.ParentBranchID != "" {
-			if u, err := uuid.Parse(item.ParentBranchID); err == nil {
-				parentID = u
-			}
-		}
-		if item.AreaID != "" {
-			if u, err := uuid.Parse(item.AreaID); err == nil {
-				areaID = u
-			}
-		}
 
 		_, err = tx.Exec(ctx, `
-			INSERT INTO branches (
-				id, org_id, branch_type_id, code, name, status,
-				branch_type, parent_branch_id, area_id, branch_classification
-			) VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''), $8, $9, NULLIF($10,''))
+			INSERT INTO branches (id, org_id, branch_code, is_active, updated_at)
+			VALUES ($1, $2, $3, $4, NOW())
 			ON CONFLICT (id) DO UPDATE SET
-				name = EXCLUDED.name,
-				status = EXCLUDED.status,
-				branch_type = EXCLUDED.branch_type,
-				parent_branch_id = EXCLUDED.parent_branch_id,
-				area_id = EXCLUDED.area_id,
-				branch_classification = EXCLUDED.branch_classification,
-				updated_at = NOW()
-		`,
-			id, p.cfg.OrgID, defaultBranchTypeID,
-			item.BranchCode, item.BranchName, status,
-			item.BranchType, parentID, areaID, item.BranchClassification,
-		)
+				org_id      = EXCLUDED.org_id,
+				branch_code = EXCLUDED.branch_code,
+				is_active   = EXCLUDED.is_active,
+				updated_at  = EXCLUDED.updated_at
+			WHERE branches.updated_at < EXCLUDED.updated_at
+		`, id, p.cfg.OrgID, item.BranchCode, isActive)
 		if err != nil {
 			return applied, fmt.Errorf("%s upsert id=%s: %w", op, id, err)
 		}
@@ -295,28 +258,6 @@ func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) 
 		return applied, fmt.Errorf("%s commit: %w", op, err)
 	}
 	return applied, nil
-}
-
-// ensureBranchTypeID returns a valid branch_type_id for the configured org,
-// creating a placeholder "DEFAULT" row if the table is empty.  Auth7 branches
-// requires the FK; in practice the seed scaffold already populates 9 rows.
-func (p *Poller) ensureBranchTypeID(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
-	// Try to find any existing branch_type for this org.
-	var id uuid.UUID
-	row := tx.QueryRow(ctx, `SELECT id FROM branch_types WHERE org_id = $1 LIMIT 1`, p.cfg.OrgID)
-	if err := row.Scan(&id); err == nil {
-		return id, nil
-	}
-	// None exists — insert a minimal placeholder.
-	newID := uuid.New()
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO branch_types (id, org_id, code, label, short_code, level, is_operational, can_have_children)
-		VALUES ($1, $2, 'DEFAULT', 'Default', 'DEF', 0, TRUE, TRUE)
-		ON CONFLICT DO NOTHING
-	`, newID, p.cfg.OrgID); err != nil {
-		return uuid.Nil, fmt.Errorf("ensureBranchTypeID: %w", err)
-	}
-	return newID, nil
 }
 
 // getM2MToken fetches a short-lived bearer token from auth7 using the
@@ -334,7 +275,7 @@ func (p *Poller) getM2MToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s build req: %w", op, err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoding")
 
 	resp, err := p.client.Do(req)
 	if err != nil {

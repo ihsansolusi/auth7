@@ -1182,7 +1182,7 @@ func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID
 		SELECT id, user_id, branch_id, is_primary
 		FROM user_branch_assignments
 		WHERE user_id = $1
-		ORDER BY is_primary DESC, created_at DESC
+		ORDER BY is_primary DESC, assigned_at DESC
 	`
 	rows, err := r.pool.Query(ctx, q, userID)
 	if err != nil {
@@ -1204,7 +1204,7 @@ func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID
 func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetPrimaryByUserID"
 	q := `
-		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.code, '')
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, '')
 		FROM user_branch_assignments uba
 		LEFT JOIN branches b ON b.id = uba.branch_id
 		WHERE uba.user_id = $1 AND uba.is_primary = true

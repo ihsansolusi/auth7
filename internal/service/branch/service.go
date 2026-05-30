@@ -119,51 +119,9 @@ func (s *Service) GetBranchType(ctx context.Context, id, orgID uuid.UUID) (*doma
 	return bt, nil
 }
 
-func (s *Service) CreateBranch(ctx context.Context, orgID uuid.UUID, params BranchParams) (*domain.Branch, error) {
-	if !params.Validate() {
-		return nil, ErrInvalidBranch
-	}
-
-	branchType, err := s.branchTypeStore.GetByID(ctx, params.BranchTypeID, orgID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid branch type: %w", err)
-	}
-
-	if params.ParentID != nil {
-		parent, err := s.branchStore.GetByID(ctx, *params.ParentID, orgID)
-		if err != nil {
-			return nil, fmt.Errorf("invalid parent branch: %w", err)
-		}
-		if !branchType.CanHaveChildren {
-			return nil, ErrCannotHaveChildren
-		}
-		_ = parent
-	}
-
-	existing, _ := s.branchStore.GetByCode(ctx, orgID, params.Code)
-	if existing != nil {
-		return nil, ErrBranchExists
-	}
-
-	branch := &domain.Branch{
-		ID:           uuid.New(),
-		OrgID:        orgID,
-		BranchTypeID: params.BranchTypeID,
-		ParentID:     params.ParentID,
-		Code:         params.Code,
-		Name:         params.Name,
-		Status:       string(domain.BranchStatusActive),
-		Address:      params.Address,
-		Phone:        params.Phone,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-
-	if err := s.branchStore.Create(ctx, branch); err != nil {
-		return nil, fmt.Errorf("%s: %w", opBranchCreate, err)
-	}
-
-	return branch, nil
+func (s *Service) CreateBranch(_ context.Context, _ uuid.UUID, _ BranchParams) (*domain.Branch, error) {
+	// Branches are a read-only projection synced from enterprise; writes are not supported in auth7.
+	return nil, fmt.Errorf("%s: %w", opBranchCreate, ErrBranchWriteNotSupported)
 }
 
 func (s *Service) AssignUserToBranch(ctx context.Context, userID, branchID, orgID uuid.UUID, params UserBranchParams) (*domain.UserBranchAssignment, error) {

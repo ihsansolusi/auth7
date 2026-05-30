@@ -318,40 +318,19 @@ func (bt *BranchType) ValidateCode() bool {
 	return len(bt.Code) >= 2 && len(bt.Code) <= 50
 }
 
+// Branch is auth7's minimal read-only projection of the enterprise branches table.
+// Synced via branchsync.Poller. Write operations on branches are not supported in auth7.
 type Branch struct {
-	ID           uuid.UUID  `json:"id"`
-	OrgID        uuid.UUID  `json:"org_id"`
-	BranchTypeID uuid.UUID  `json:"branch_type_id"`
-	ParentID     *uuid.UUID `json:"parent_id,omitempty"`
-	Code         string     `json:"code"`
-	Name         string     `json:"name"`
-	Status       string     `json:"status"`
-	Address      string     `json:"address"`
-	Phone        string     `json:"phone"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	ID         uuid.UUID `json:"id"`
+	OrgID      uuid.UUID `json:"org_id"`
+	BranchCode string    `json:"branch_code"`
+	Active     bool      `json:"is_active"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-type BranchStatus string
-
-const (
-	BranchStatusActive   BranchStatus = "active"
-	BranchStatusInactive BranchStatus = "inactive"
-	BranchStatusPending  BranchStatus = "pending"
-	BranchStatusClosed   BranchStatus = "closed"
-)
-
-func (b *Branch) IsActive() bool {
-	return b.Status == string(BranchStatusActive)
-}
-
-func (b *Branch) HasParent() bool {
-	return b.ParentID != nil
-}
-
+func (b *Branch) IsActive() bool { return b.Active }
 func (b *Branch) ValidateCode() bool {
-	return len(b.Code) >= 2 && len(b.Code) <= 20
+	return len(b.BranchCode) >= 2 && len(b.BranchCode) <= 20
 }
 
 type BranchHierarchy struct {
