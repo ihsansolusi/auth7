@@ -1204,14 +1204,14 @@ func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID
 func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetPrimaryByUserID"
 	q := `
-		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, b.branch_code
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, ''), COALESCE(b.name, '')
 		FROM user_branch_assignments uba
 		JOIN branches b ON b.id = uba.branch_id
 		WHERE uba.user_id = $1 AND uba.is_primary = true AND b.is_active = true
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
-	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode, &a.BranchName)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -1221,7 +1221,7 @@ func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context,
 func (r *UserBranchAssignmentRepository) GetAnyActiveByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetAnyActiveByUserID"
 	q := `
-		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, b.branch_code
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, ''), COALESCE(b.name, '')
 		FROM user_branch_assignments uba
 		JOIN branches b ON b.id = uba.branch_id
 		WHERE uba.user_id = $1 AND b.is_active = true
@@ -1229,7 +1229,7 @@ func (r *UserBranchAssignmentRepository) GetAnyActiveByUserID(ctx context.Contex
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
-	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode, &a.BranchName)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -1239,14 +1239,14 @@ func (r *UserBranchAssignmentRepository) GetAnyActiveByUserID(ctx context.Contex
 func (r *UserBranchAssignmentRepository) GetByUserAndBranch(ctx context.Context, userID, branchID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetByUserAndBranch"
 	q := `
-		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, '')
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, ''), COALESCE(b.name, '')
 		FROM user_branch_assignments uba
 		JOIN branches b ON b.id = uba.branch_id
 		WHERE uba.user_id = $1 AND uba.branch_id = $2 AND b.is_active = true
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
-	err := r.pool.QueryRow(ctx, q, userID, branchID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
+	err := r.pool.QueryRow(ctx, q, userID, branchID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode, &a.BranchName)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

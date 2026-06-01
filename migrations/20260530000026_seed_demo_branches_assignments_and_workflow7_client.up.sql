@@ -8,6 +8,8 @@
 -- consistent with the source-of-truth branch hierarchy in enterprise.
 
 -- ─── 1. Branches (minimal projection: id, org_id, branch_code, is_active) ────
+-- branch_name added by migration 28 — populated via UPDATE there to avoid
+-- needing schema-conditional logic in this older migration.
 INSERT INTO branches (id, org_id, branch_code, is_active) VALUES
     ('5c7850c8-0c4e-5e5b-b899-c7b933122888',
      '00000000-0000-0000-0000-000000000001',

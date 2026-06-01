@@ -89,13 +89,15 @@ func (s *Server) handleInternalUserContext(store *postgres.Store) gin.HandlerFun
 			return
 		}
 
-		var branchID, branchCode string
+		var branchID, branchCode, branchName string
 		if primary, err := store.UserBranchAssignmentRepository.GetPrimaryByUserID(ctx, userID); err == nil && primary != nil {
 			branchID = primary.BranchID.String()
 			branchCode = primary.BranchCode
+			branchName = primary.BranchName
 		} else if any, err := store.UserBranchAssignmentRepository.GetAnyActiveByUserID(ctx, userID); err == nil && any != nil {
 			branchID = any.BranchID.String()
 			branchCode = any.BranchCode
+			branchName = any.BranchName
 		}
 
 		roles, _ := store.UserRoleRepository.GetRoleCodesByUser(ctx, userID)
@@ -110,7 +112,7 @@ func (s *Server) handleInternalUserContext(store *postgres.Store) gin.HandlerFun
 			"org_id":           user.OrgID.String(),
 			"branch_id":        branchID,
 			"branch_code":      branchCode,
-			"branch_name":      "",
+			"branch_name":      branchName,
 			"branch_level":     "",
 			"parent_branch_id": nil,
 			"roles":            roles,

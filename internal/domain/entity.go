@@ -347,7 +347,8 @@ type UserBranchAssignment struct {
 	ID         uuid.UUID  `json:"id"`
 	UserID     uuid.UUID  `json:"user_id"`
 	BranchID   uuid.UUID  `json:"branch_id"`
-	BranchCode string     `json:"branch_code"` // branches.code — populated by JOIN queries
+	BranchCode string     `json:"branch_code"` // branches.branch_code — populated by JOIN queries
+	BranchName string     `json:"branch_name"` // branches.name — populated by JOIN queries (W17: minimal projection extended)
 	OrgID      uuid.UUID  `json:"org_id"`
 	Role       string     `json:"role"`
 	IsPrimary  bool       `json:"is_primary"`

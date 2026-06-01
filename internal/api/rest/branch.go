@@ -225,11 +225,13 @@ func (s *Server) handleListUserBranches(c *gin.Context) {
 			"is_primary":  a.IsPrimary,
 			"assigned_at": a.AssignedAt,
 		}
-		// Look up branch_code from branches projection table
-		var branchCode string
+		// Look up branch_code + name from branches projection table.
+		var branchCode, branchName string
 		if err := store.Pool().QueryRow(c.Request.Context(),
-			"SELECT branch_code FROM branches WHERE id = $1", a.BranchID).Scan(&branchCode); err == nil {
+			"SELECT COALESCE(branch_code, ''), COALESCE(name, '') FROM branches WHERE id = $1",
+			a.BranchID).Scan(&branchCode, &branchName); err == nil {
 			branchInfo["branch_code"] = branchCode
+			branchInfo["branch_name"] = branchName
 		}
 		branches = append(branches, branchInfo)
 	}
