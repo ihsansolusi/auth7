@@ -79,7 +79,12 @@ func (s *Server) handleInternalUserContext(store *postgres.Store) gin.HandlerFun
 		ctx := c.Request.Context()
 
 		user, err := store.UserRepository.GetByID(ctx, userID)
-		if err != nil || user == nil {
+		if err != nil {
+			s.deps.Logger.Error().Err(err).Str("user_id", userID.String()).Msg("user-context: GetByID failed")
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if user == nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
