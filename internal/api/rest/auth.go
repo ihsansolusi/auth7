@@ -90,13 +90,13 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 
 	email := domain.NormalizeEmail(req.Email)
 
-	existingUser, err := h.store.UserRepository.GetByUsername(c.Request.Context(), orgID, req.Username)
+	existingUser, err := h.store.UserRepository.GetByUsername(c.Request.Context(), req.Username)
 	if err == nil && existingUser != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 		return
 	}
 
-	existingUser, err = h.store.UserRepository.GetByEmail(c.Request.Context(), orgID, email)
+	existingUser, err = h.store.UserRepository.GetByEmail(c.Request.Context(), email)
 	if err == nil && existingUser != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
 		return
@@ -194,7 +194,6 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	OrgID    string `json:"org_id" binding:"required"`
 	MFACode  string `json:"mfa_code"`
 }
 
@@ -205,23 +204,22 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	orgID, err := uuid.Parse(req.OrgID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
-		return
-	}
-
-	var user *domain.User
+	var (
+		user *domain.User
+		err  error
+	)
 	usernameOrEmail := strings.TrimSpace(req.Username)
 	if strings.Contains(usernameOrEmail, "@") {
-		user, err = h.store.UserRepository.GetByEmail(c.Request.Context(), orgID, domain.NormalizeEmail(usernameOrEmail))
+		user, err = h.store.UserRepository.GetByEmail(c.Request.Context(), domain.NormalizeEmail(usernameOrEmail))
 	} else {
-		user, err = h.store.UserRepository.GetByUsername(c.Request.Context(), orgID, usernameOrEmail)
+		user, err = h.store.UserRepository.GetByUsername(c.Request.Context(), usernameOrEmail)
 	}
 	if err != nil || user == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
+
+	orgID := user.OrgID
 
 	if !user.CanLogin() {
 		c.JSON(http.StatusForbidden, gin.H{"error": "account not available for login"})
@@ -264,6 +262,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	if primaryBranch, err := h.store.UserBranchAssignmentRepository.GetPrimaryByUserID(c.Request.Context(), user.ID); err == nil && primaryBranch != nil {
 		branchID = primaryBranch.BranchID.String()
 		branchCode = primaryBranch.BranchCode
+	} else if anyBranch, err := h.store.UserBranchAssignmentRepository.GetAnyActiveByUserID(c.Request.Context(), user.ID); err == nil && anyBranch != nil {
+		branchID = anyBranch.BranchID.String()
+		branchCode = anyBranch.BranchCode
 	}
 
 	claims := jwt.Claims{
@@ -720,7 +721,6 @@ func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
 
 type ForgotPasswordRequest struct {
 	Email     string `json:"email"      binding:"required,email"`
-	OrgID     string `json:"org_id"     binding:"required"`
 	ReturnURL string `json:"return_url"` // optional: calling app origin, embedded in email link
 }
 
@@ -731,14 +731,8 @@ func (h *AuthHandler) HandleForgotPassword(c *gin.Context) {
 		return
 	}
 
-	orgID, err := uuid.Parse(req.OrgID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
-		return
-	}
-
 	email := domain.NormalizeEmail(req.Email)
-	user, err := h.store.UserRepository.GetByEmail(c.Request.Context(), orgID, email)
+	user, err := h.store.UserRepository.GetByEmail(c.Request.Context(), email)
 	if err != nil || user == nil {
 		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a reset link has been sent"})
 		return

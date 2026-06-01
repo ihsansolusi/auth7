@@ -7,7 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/messaging/nats"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
+	"github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 )
 
@@ -259,6 +261,8 @@ func (s *Server) handleSwitchBranch(c *gin.Context) {
 
 	sessionSvc, ok := s.deps.SessionSvc.(interface {
 		VerifyAccessToken(ctx context.Context, token string) (*jwt.Claims, error)
+		RevokeSession(ctx context.Context, sessionID string) error
+		CreateSession(ctx context.Context, userID, orgID uuid.UUID, ipAddress, userAgent string, claims jwt.Claims) (*session.LoginResult, error)
 	})
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "session service unavailable"})
@@ -291,49 +295,65 @@ func (s *Server) handleSwitchBranch(c *gin.Context) {
 
 	assignment, err := store.UserBranchAssignmentRepository.GetByUserAndBranch(c.Request.Context(), userID, branchID)
 	if err != nil || assignment == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "user not assigned to this branch"})
-		return
-	}
-
-	jwtSvc, ok := s.deps.JWTSvc.(interface {
-		IssueAccessToken(sessionID string, userID, orgID uuid.UUID, claims jwt.Claims) (string, *jwt.AccessToken, error)
-	})
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "jwt service unavailable"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "user not assigned to this branch or branch inactive"})
 		return
 	}
 
 	orgID, _ := uuid.Parse(claims.OrgID)
 
-	newClaims := jwt.Claims{
-		Username: claims.Username,
-		Email:    claims.Email,
-		Roles:    claims.Roles,
-		BranchID: branchID.String(),
-	}
+	roles, _ := store.UserRoleRepository.GetRoleCodesByUser(c.Request.Context(), userID)
 
-	newSessionID := uuid.New().String()
-	newAccessToken, accessTokenMeta, err := jwtSvc.IssueAccessToken(newSessionID, userID, orgID, newClaims)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to issue new token"})
+	if err := sessionSvc.RevokeSession(c.Request.Context(), claims.SessionID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke previous session"})
 		return
 	}
 
-	expiresIn := 900
-	if accessTokenMeta != nil {
-		expiresIn = int(time.Until(accessTokenMeta.ExpiresAt).Seconds())
-		if expiresIn < 0 {
-			expiresIn = 0
-		}
+	newClaims := jwt.Claims{
+		Username:   claims.Username,
+		Email:      claims.Email,
+		Roles:      roles,
+		BranchID:   branchID.String(),
+		BranchCode: assignment.BranchCode,
 	}
 
+	ipAddress := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+
+	result, err := sessionSvc.CreateSession(c.Request.Context(), userID, orgID, ipAddress, userAgent, newClaims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create new session"})
+		return
+	}
+
+	switchedAt := time.Now().UTC()
+
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": newAccessToken,
-		"token_type":   "Bearer",
-		"expires_in":   expiresIn,
-		"branch_id":    branchID.String(),
-		"switched_at":  time.Now().UTC().Format(time.RFC3339),
+		"access_token":  result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    result.ExpiresIn,
+		"session_id":    result.SessionID,
+		"branch_id":     branchID.String(),
+		"branch_code":   assignment.BranchCode,
+		"switched_at":   switchedAt.Format(time.RFC3339),
 	})
+
+	if s.deps.EventPub != nil {
+		_ = s.deps.EventPub.PublishBranchSwitched(c.Request.Context(), nats.BranchSwitchedEvent{
+			UserID:        userID.String(),
+			Username:      claims.Username,
+			OrgID:         orgID.String(),
+			OldSessionID:  claims.SessionID,
+			NewSessionID:  result.SessionID,
+			OldBranchID:   claims.BranchID,
+			OldBranchCode: claims.BranchCode,
+			NewBranchID:   branchID.String(),
+			NewBranchCode: assignment.BranchCode,
+			IPAddress:     ipAddress,
+			UserAgent:     userAgent,
+			SwitchedAt:    switchedAt,
+		})
+	}
 }
 
 func trimBearer(auth string) string {

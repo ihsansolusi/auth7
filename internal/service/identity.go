@@ -43,12 +43,12 @@ func (s *IdentityService) Register(ctx context.Context, input RegisterInput) (*R
 
 	email := domain.NormalizeEmail(input.Email)
 
-	existingUser, err := s.store.UserRepository.GetByUsername(ctx, input.OrgID, input.Username)
+	existingUser, err := s.store.UserRepository.GetByUsername(ctx, input.Username)
 	if err == nil && existingUser != nil {
 		return nil, fmt.Errorf("%s: username already exists", op)
 	}
 
-	existingUser, err = s.store.UserRepository.GetByEmail(ctx, input.OrgID, email)
+	existingUser, err = s.store.UserRepository.GetByEmail(ctx, email)
 	if err == nil && existingUser != nil {
 		return nil, fmt.Errorf("%s: email already exists", op)
 	}
@@ -158,7 +158,6 @@ func (s *IdentityService) VerifyEmail(ctx context.Context, input VerifyEmailInpu
 
 type RecoverPasswordInput struct {
 	Email string
-	OrgID uuid.UUID
 }
 
 func (s *IdentityService) RecoverPassword(ctx context.Context, input RecoverPasswordInput) error {
@@ -166,7 +165,7 @@ func (s *IdentityService) RecoverPassword(ctx context.Context, input RecoverPass
 
 	email := domain.NormalizeEmail(input.Email)
 
-	user, err := s.store.UserRepository.GetByEmail(ctx, input.OrgID, email)
+	user, err := s.store.UserRepository.GetByEmail(ctx, email)
 	if err != nil {
 		return nil
 	}

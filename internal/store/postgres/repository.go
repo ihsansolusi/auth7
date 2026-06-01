@@ -124,7 +124,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	return &user, nil
 }
 
-func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, username string) (*domain.User, error) {
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	const op = "postgres.UserRepository.GetByUsername"
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
@@ -133,12 +133,12 @@ func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, use
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
 			created_at, updated_at, deleted_at, created_by, updated_by
-		FROM users WHERE org_id = $1 AND username = $2 AND deleted_at IS NULL
+		FROM users WHERE username = $1 AND deleted_at IS NULL
 	`
 	var user domain.User
 	var mfaMethod pgtype.Text
 	var lastLoginIP pgtype.Text
-	err := r.pool.QueryRow(ctx, q, orgID, username).Scan(
+	err := r.pool.QueryRow(ctx, q, username).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
 		&user.PreferredLocale,
 		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
@@ -158,7 +158,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, orgID uuid.UUID, use
 	return &user, nil
 }
 
-func (r *UserRepository) GetByEmail(ctx context.Context, orgID uuid.UUID, email string) (*domain.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	const op = "postgres.UserRepository.GetByEmail"
 	q := `
 		SELECT id, org_id, username, email, full_name, status,
@@ -167,12 +167,12 @@ func (r *UserRepository) GetByEmail(ctx context.Context, orgID uuid.UUID, email 
 			require_password_change, failed_login_attempts, locked_until,
 			last_login_at, last_login_ip, password_changed_at,
 			created_at, updated_at, deleted_at, created_by, updated_by
-		FROM users WHERE org_id = $1 AND email = $2 AND deleted_at IS NULL
+		FROM users WHERE email = $1 AND deleted_at IS NULL
 	`
 	var user domain.User
 	var mfaMethod pgtype.Text
 	var lastLoginIP pgtype.Text
-	err := r.pool.QueryRow(ctx, q, orgID, email).Scan(
+	err := r.pool.QueryRow(ctx, q, email).Scan(
 		&user.ID, &user.OrgID, &user.Username, &user.Email, &user.FullName, &user.Status,
 		&user.PreferredLocale,
 		&user.EmailVerified, &user.MFAEnabled, &mfaMethod, &user.MFAResetRequired,
@@ -1204,10 +1204,28 @@ func (r *UserBranchAssignmentRepository) GetByUserID(ctx context.Context, userID
 func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetPrimaryByUserID"
 	q := `
-		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, '')
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, b.branch_code
 		FROM user_branch_assignments uba
-		LEFT JOIN branches b ON b.id = uba.branch_id
-		WHERE uba.user_id = $1 AND uba.is_primary = true
+		JOIN branches b ON b.id = uba.branch_id
+		WHERE uba.user_id = $1 AND uba.is_primary = true AND b.is_active = true
+		LIMIT 1
+	`
+	var a domain.UserBranchAssignment
+	err := r.pool.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &a, nil
+}
+
+func (r *UserBranchAssignmentRepository) GetAnyActiveByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserBranchAssignment, error) {
+	const op = "postgres.UserBranchAssignmentRepository.GetAnyActiveByUserID"
+	q := `
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, b.branch_code
+		FROM user_branch_assignments uba
+		JOIN branches b ON b.id = uba.branch_id
+		WHERE uba.user_id = $1 AND b.is_active = true
+		ORDER BY uba.is_primary DESC, uba.assigned_at DESC
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
@@ -1221,13 +1239,14 @@ func (r *UserBranchAssignmentRepository) GetPrimaryByUserID(ctx context.Context,
 func (r *UserBranchAssignmentRepository) GetByUserAndBranch(ctx context.Context, userID, branchID uuid.UUID) (*domain.UserBranchAssignment, error) {
 	const op = "postgres.UserBranchAssignmentRepository.GetByUserAndBranch"
 	q := `
-		SELECT id, user_id, branch_id, is_primary
-		FROM user_branch_assignments
-		WHERE user_id = $1 AND branch_id = $2
+		SELECT uba.id, uba.user_id, uba.branch_id, uba.is_primary, COALESCE(b.branch_code, '')
+		FROM user_branch_assignments uba
+		JOIN branches b ON b.id = uba.branch_id
+		WHERE uba.user_id = $1 AND uba.branch_id = $2 AND b.is_active = true
 		LIMIT 1
 	`
 	var a domain.UserBranchAssignment
-	err := r.pool.QueryRow(ctx, q, userID, branchID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary)
+	err := r.pool.QueryRow(ctx, q, userID, branchID).Scan(&a.ID, &a.UserID, &a.BranchID, &a.IsPrimary, &a.BranchCode)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

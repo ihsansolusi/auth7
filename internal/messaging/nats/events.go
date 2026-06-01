@@ -8,6 +8,7 @@ const (
 	SubjectSessionCreated    = "auth7.sessions.created"
 	SubjectSessionTerminated = "auth7.sessions.terminated"
 	SubjectSessionRevokedAll = "auth7.sessions.revoked_all"
+	SubjectBranchSwitched    = "auth7.sessions.branch_switched"
 	SubjectSecurityAlert     = "auth7.security.alert"
 )
 
@@ -47,6 +48,21 @@ type SessionRevokedAllEvent struct {
 	OrgID     string    `json:"org_id"`
 	RevokedBy string    `json:"revoked_by"`
 	RevokedAt time.Time `json:"revoked_at"`
+}
+
+type BranchSwitchedEvent struct {
+	UserID        string    `json:"user_id"`
+	Username      string    `json:"username"`
+	OrgID         string    `json:"org_id"`
+	OldSessionID  string    `json:"old_session_id"`
+	NewSessionID  string    `json:"new_session_id"`
+	OldBranchID   string    `json:"old_branch_id"`
+	OldBranchCode string    `json:"old_branch_code"`
+	NewBranchID   string    `json:"new_branch_id"`
+	NewBranchCode string    `json:"new_branch_code"`
+	IPAddress     string    `json:"ip_address"`
+	UserAgent     string    `json:"user_agent"`
+	SwitchedAt    time.Time `json:"switched_at"`
 }
 
 type SecurityAlertType string

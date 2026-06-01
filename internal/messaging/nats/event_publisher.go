@@ -59,6 +59,14 @@ func (ep *EventPublisher) PublishSessionRevokedAll(ctx context.Context, event Se
 	return nil
 }
 
+func (ep *EventPublisher) PublishBranchSwitched(ctx context.Context, event BranchSwitchedEvent) error {
+	const op = "messaging.PublishBranchSwitched"
+	if err := ep.publisher.Publish(ctx, SubjectBranchSwitched, event); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
 func (ep *EventPublisher) PublishSecurityAlert(ctx context.Context, event SecurityAlertEvent) error {
 	const op = "messaging.PublishSecurityAlert"
 	if err := ep.publisher.Publish(ctx, SubjectSecurityAlert, event); err != nil {
