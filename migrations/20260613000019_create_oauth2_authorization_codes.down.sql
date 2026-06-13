@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS oauth2_authorization_codes;
+DROP TYPE IF EXISTS oauth2_authorization_codes_code_challenge_method_enum;

@@ -1,0 +1,1 @@
+DELETE FROM user_branch_assignments WHERE org_id = '00000000-0000-0000-0000-000000000001';

@@ -1,15 +1,15 @@
 DO $$ BEGIN
-    CREATE TYPE users_preferred_locale_enum AS ENUM ('id', 'en');
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-DO $$ BEGIN
     CREATE TYPE users_status_enum AS ENUM ('created', 'pending_verification', 'active', 'inactive', 'locked', 'suspended', 'deleted');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
     CREATE TYPE users_mfa_method_enum AS ENUM ('', 'totp', 'email_otp');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE users_preferred_locale_enum AS ENUM ('id', 'en');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
