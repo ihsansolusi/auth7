@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,7 +117,7 @@ func AdminAuth(cfg AdminAuthConfig, auditLogger *audit.Service, logger zerolog.L
 
 		hasRole := false
 		for _, role := range tokenClaims.GetRoles() {
-			if cfg.AllowedRoles[role] {
+			if cfg.AllowedRoles[strings.ToLower(role)] {
 				hasRole = true
 				break
 			}

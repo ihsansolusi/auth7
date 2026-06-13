@@ -30,6 +30,7 @@ type Store struct {
 	OAuth2AuthCodeRepository   *OAuth2AuthCodeRepository
 	UserBranchAssignmentRepository *UserBranchAssignmentRepository
 	BranchTypeRepository           *BranchTypeRepository
+	BranchRepository               *BranchRepository
 }
 
 func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
@@ -49,6 +50,7 @@ func New(pool *pgxpool.Pool, replica *pgxpool.Pool) *Store {
 	s.OAuth2AuthCodeRepository = &OAuth2AuthCodeRepository{pool: pool}
 	s.UserBranchAssignmentRepository = &UserBranchAssignmentRepository{pool: pool}
 	s.BranchTypeRepository = &BranchTypeRepository{pool: pool}
+	s.BranchRepository = &BranchRepository{pool: pool}
 	return s
 }
 
@@ -284,12 +286,12 @@ type CredentialRepository struct {
 func (r *CredentialRepository) Create(ctx context.Context, cred *domain.UserCredential) error {
 	const op = "postgres.CredentialRepository.Create"
 	q := `
-		INSERT INTO user_credentials (id, user_id, credential_type, secret_hash, version, is_current, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO user_credentials (id, user_id, credential_type, secret_hash, created_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 	_, err := r.pool.Exec(ctx, q,
 		cred.ID, cred.UserID, cred.CredentialType, cred.SecretHash,
-		cred.Version, cred.IsCurrent, cred.CreatedAt, cred.ExpiresAt,
+		cred.CreatedAt, cred.ExpiresAt,
 	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
@@ -300,16 +302,14 @@ func (r *CredentialRepository) Create(ctx context.Context, cred *domain.UserCred
 func (r *CredentialRepository) GetCurrentByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserCredential, error) {
 	const op = "postgres.CredentialRepository.GetCurrentByUserID"
 	q := `
-		SELECT id, user_id, credential_type, secret_hash, version, is_current, created_at, expires_at
+		SELECT id, user_id, credential_type, secret_hash, created_at, expires_at
 		FROM user_credentials
-		WHERE user_id = $1 AND is_current = true
-		ORDER BY created_at DESC
-		LIMIT 1
+		WHERE user_id = $1 AND credential_type = 'password'
 	`
 	var cred domain.UserCredential
 	err := r.pool.QueryRow(ctx, q, userID).Scan(
 		&cred.ID, &cred.UserID, &cred.CredentialType, &cred.SecretHash,
-		&cred.Version, &cred.IsCurrent, &cred.CreatedAt, &cred.ExpiresAt,
+		&cred.CreatedAt, &cred.ExpiresAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -317,13 +317,13 @@ func (r *CredentialRepository) GetCurrentByUserID(ctx context.Context, userID uu
 	return &cred, nil
 }
 
-func (r *CredentialRepository) GetHistory(ctx context.Context, userID uuid.UUID, limit int) ([]*domain.UserCredential, error) {
+func (r *CredentialRepository) GetHistory(ctx context.Context, userID uuid.UUID, limit int) ([]*domain.UserCredentialHistory, error) {
 	const op = "postgres.CredentialRepository.GetHistory"
 	q := `
-		SELECT id, user_id, credential_type, secret_hash, version, is_current, created_at, expires_at
-		FROM user_credentials
-		WHERE user_id = $1 AND is_current = false
-		ORDER BY created_at DESC
+		SELECT id, user_id, credential_type, secret_hash, retired_at
+		FROM user_credential_history
+		WHERE user_id = $1
+		ORDER BY retired_at DESC
 		LIMIT $2
 	`
 	rows, err := r.pool.Query(ctx, q, userID, limit)
@@ -332,51 +332,65 @@ func (r *CredentialRepository) GetHistory(ctx context.Context, userID uuid.UUID,
 	}
 	defer rows.Close()
 
-	var creds []*domain.UserCredential
+	var entries []*domain.UserCredentialHistory
 	for rows.Next() {
-		var cred domain.UserCredential
-		if err := rows.Scan(
-			&cred.ID, &cred.UserID, &cred.CredentialType, &cred.SecretHash,
-			&cred.Version, &cred.IsCurrent, &cred.CreatedAt, &cred.ExpiresAt,
-		); err != nil {
+		var h domain.UserCredentialHistory
+		if err := rows.Scan(&h.ID, &h.UserID, &h.CredentialType, &h.SecretHash, &h.RetiredAt); err != nil {
 			return nil, fmt.Errorf("%s: scan: %w", op, err)
 		}
-		creds = append(creds, &cred)
+		entries = append(entries, &h)
 	}
-	return creds, nil
+	return entries, nil
 }
 
-func (r *CredentialRepository) Update(ctx context.Context, cred *domain.UserCredential) error {
-	const op = "postgres.CredentialRepository.Update"
-	q := `
-		UPDATE user_credentials SET
-			is_current = $2, expires_at = $3
-		WHERE id = $1
-	`
-	_, err := r.pool.Exec(ctx, q, cred.ID, cred.IsCurrent, cred.ExpiresAt)
+// Replace atomically: pindahkan credential aktif ke history, update dengan hash baru.
+// Seluruh operasi dijalankan dalam satu transaksi.
+func (r *CredentialRepository) Replace(ctx context.Context, userID uuid.UUID, credentialType, newHash string, keepHistoryCount int) error {
+	const op = "postgres.CredentialRepository.Replace"
+
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: begin tx: %w", op, err)
 	}
-	return nil
-}
+	defer tx.Rollback(ctx)
 
-func (r *CredentialRepository) RetireOldCredentials(ctx context.Context, userID uuid.UUID, keepCount int) error {
-	const op = "postgres.CredentialRepository.RetireOldCredentials"
-	q := `
-		UPDATE user_credentials SET expires_at = NOW()
-		WHERE user_id = $1 AND is_current = false AND expires_at IS NULL
+	// 1. Salin credential aktif ke history
+	_, err = tx.Exec(ctx, `
+		INSERT INTO user_credential_history (id, user_id, credential_type, secret_hash, retired_at)
+		SELECT id, user_id, credential_type, secret_hash, NOW()
+		FROM user_credentials
+		WHERE user_id = $1 AND credential_type = $2
+	`, userID, credentialType)
+	if err != nil {
+		return fmt.Errorf("%s: archive to history: %w", op, err)
+	}
+
+	// 2. Prune history — simpan hanya keepHistoryCount entry terbaru
+	_, err = tx.Exec(ctx, `
+		DELETE FROM user_credential_history
+		WHERE user_id = $1 AND credential_type = $2
 		AND id NOT IN (
-			SELECT id FROM user_credentials
-			WHERE user_id = $1 AND is_current = false
-			ORDER BY created_at DESC
-			LIMIT $2
+			SELECT id FROM user_credential_history
+			WHERE user_id = $1 AND credential_type = $2
+			ORDER BY retired_at DESC
+			LIMIT $3
 		)
-	`
-	_, err := r.pool.Exec(ctx, q, userID, keepCount)
+	`, userID, credentialType, keepHistoryCount)
 	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: prune history: %w", op, err)
 	}
-	return nil
+
+	// 3. Update credential aktif dengan hash baru
+	_, err = tx.Exec(ctx, `
+		UPDATE user_credentials
+		SET secret_hash = $3, created_at = NOW(), expires_at = NULL
+		WHERE user_id = $1 AND credential_type = $2
+	`, userID, credentialType, newHash)
+	if err != nil {
+		return fmt.Errorf("%s: update credential: %w", op, err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 type VerificationTokenRepository struct {
@@ -964,21 +978,35 @@ func (r *UserRoleRepository) Create(ctx context.Context, ur *domain.UserRole) er
 	return nil
 }
 
+func scanUserRole(scan func(...any) error) (*domain.UserRole, error) {
+	var ur domain.UserRole
+	var grantedByStr string
+	var revokedByStr *string
+	if err := scan(
+		&ur.ID, &ur.UserID, &ur.RoleID, &ur.OrgID, &ur.BranchID,
+		&grantedByStr, &ur.GrantedAt, &ur.RevokedAt, &revokedByStr,
+	); err != nil {
+		return nil, err
+	}
+	ur.GrantedBy, _ = uuid.Parse(grantedByStr)
+	if revokedByStr != nil {
+		id, _ := uuid.Parse(*revokedByStr)
+		ur.RevokedBy = &id
+	}
+	return &ur, nil
+}
+
 func (r *UserRoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.UserRole, error) {
 	const op = "postgres.UserRoleRepository.GetByID"
 	q := `
 		SELECT id, user_id, role_id, org_id, branch_id, granted_by, granted_at, revoked_at, revoked_by
 		FROM user_roles WHERE id = $1
 	`
-	var ur domain.UserRole
-	err := r.pool.QueryRow(ctx, q, id).Scan(
-		&ur.ID, &ur.UserID, &ur.RoleID, &ur.OrgID, &ur.BranchID,
-		&ur.GrantedBy, &ur.GrantedAt, &ur.RevokedAt, &ur.RevokedBy,
-	)
+	ur, err := scanUserRole(r.pool.QueryRow(ctx, q, id).Scan)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &ur, nil
+	return ur, nil
 }
 
 func (r *UserRoleRepository) GetByUser(ctx context.Context, userID uuid.UUID) ([]*domain.UserRole, error) {
@@ -996,14 +1024,11 @@ func (r *UserRoleRepository) GetByUser(ctx context.Context, userID uuid.UUID) ([
 
 	var roles []*domain.UserRole
 	for rows.Next() {
-		var ur domain.UserRole
-		if err := rows.Scan(
-			&ur.ID, &ur.UserID, &ur.RoleID, &ur.OrgID, &ur.BranchID,
-			&ur.GrantedBy, &ur.GrantedAt, &ur.RevokedAt, &ur.RevokedBy,
-		); err != nil {
+		ur, err := scanUserRole(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("%s: scan: %w", op, err)
 		}
-		roles = append(roles, &ur)
+		roles = append(roles, ur)
 	}
 	return roles, nil
 }
@@ -1023,14 +1048,11 @@ func (r *UserRoleRepository) GetByBranch(ctx context.Context, branchID uuid.UUID
 
 	var roles []*domain.UserRole
 	for rows.Next() {
-		var ur domain.UserRole
-		if err := rows.Scan(
-			&ur.ID, &ur.UserID, &ur.RoleID, &ur.OrgID, &ur.BranchID,
-			&ur.GrantedBy, &ur.GrantedAt, &ur.RevokedAt, &ur.RevokedBy,
-		); err != nil {
+		ur, err := scanUserRole(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("%s: scan: %w", op, err)
 		}
-		roles = append(roles, &ur)
+		roles = append(roles, ur)
 	}
 	return roles, nil
 }

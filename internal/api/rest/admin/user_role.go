@@ -33,7 +33,7 @@ func NewUserRoleHandler(userRoleSvc UserRoleService, auditSvc *audit.Service, lo
 
 func (h *UserRoleHandler) RegisterRoutes(r *gin.RouterGroup) {
 	r.POST("/users/:id/roles", h.handleAssignRole)
-	r.DELETE("/users/:user_id/roles/:role_id", h.handleRevokeRole)
+	r.DELETE("/users/:id/roles/:role_id", h.handleRevokeRole)
 	r.GET("/users/:id/roles", h.handleGetUserRoles)
 	r.GET("/branches/:id/roles", h.handleGetBranchRoles)
 }
@@ -88,7 +88,7 @@ func (h *UserRoleHandler) handleRevokeRole(c *gin.Context) {
 		return
 	}
 	orgID, _ := uuid.Parse(orgStr)
-	userID, _ := uuid.Parse(c.Param("user_id"))
+	userID, _ := uuid.Parse(c.Param("id"))
 	roleID, _ := uuid.Parse(c.Param("role_id"))
 
 	if err := h.userRoleSvc.RevokeRole(c.Request.Context(), userID, roleID, orgID, uuid.Nil); err != nil {

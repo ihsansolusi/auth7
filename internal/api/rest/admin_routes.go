@@ -67,26 +67,12 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 	adminpkg.NewUserHandler(newAdminUserSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewRoleHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewFacadeHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
-	// UserRoleHandler excluded: its /users/:user_id/* path conflicts with UserHandler's /users/:id/*
-	// Register only non-conflicting branch roles route from UserRoleHandler:
-	userRoleSvcInst := newAdminUserRoleSvc(store)
-	adminV1.GET("/branches/:id/roles", func(c *gin.Context) {
-		branchID, err := uuid.Parse(c.Param("id"))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid branch id"})
-			return
-		}
-		roles, err := userRoleSvcInst.GetBranchRoles(c.Request.Context(), branchID)
-		if err != nil {
-			s.deps.Logger.Error().Err(err).Msg("get branch roles failed")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"roles": roles})
-	})
+	adminpkg.NewUserRoleHandler(newAdminUserRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewAuditHandler(auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewOAuth2ClientHandler(newAdminOAuth2ClientSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
-	adminpkg.NewBranchHandler(newAdminBranchSvc(store), auditSvc, s.deps.Logger).RegisterBranchTypeRoutes(adminV1)
+	branchHandler := adminpkg.NewBranchHandler(newAdminBranchSvc(store), auditSvc, s.deps.Logger)
+	branchHandler.RegisterBranchTypeRoutes(adminV1)
+	branchHandler.RegisterBranchRoutes(adminV1)
 
 	if sessionSvc, ok := s.deps.SessionSvc.(*sessionpkg.Service); ok {
 		adminpkg.NewSessionHandler(sessionSvc, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
@@ -772,8 +758,6 @@ func (s *adminOAuth2ClientSvc) DeleteClient(ctx interface{}, id uuid.UUID) error
 }
 
 // ── adminBranchSvc ────────────────────────────────────────────────────────────
-// Branch-types CRUD via BranchTypeRepository. Branch/UserBranch methods are
-// stubs (RegisterBranchTypeRoutes only invokes branch-type methods).
 
 type adminBranchSvc struct{ store *postgres.Store }
 
@@ -829,29 +813,58 @@ func (s *adminBranchSvc) DeleteBranchType(ctx interface{}, id, orgID uuid.UUID) 
 	return s.store.BranchTypeRepository.Delete(ctx.(context.Context), id, orgID)
 }
 
-// Branch and UserBranch methods are unsupported (only branch-type routes registered).
-
 func (s *adminBranchSvc) CreateBranch(ctx interface{}, orgID uuid.UUID, params adminpkg.BranchParams) (*domain.Branch, error) {
-	return nil, fmt.Errorf("not implemented")
+	b := &domain.Branch{
+		ID:         uuid.New(),
+		OrgID:      orgID,
+		BranchCode: params.Code,
+		Name:       params.Name,
+		Active:     true,
+		UpdatedAt:  time.Now(),
+	}
+	return b, s.store.BranchRepository.Create(ctx.(context.Context), b)
 }
+
 func (s *adminBranchSvc) GetBranch(ctx interface{}, id, orgID uuid.UUID) (*domain.Branch, error) {
-	return nil, fmt.Errorf("not implemented")
+	return s.store.BranchRepository.GetByID(ctx.(context.Context), id, orgID)
 }
+
 func (s *adminBranchSvc) ListBranches(ctx interface{}, orgID uuid.UUID) ([]*domain.Branch, error) {
-	return nil, fmt.Errorf("not implemented")
+	return s.store.BranchRepository.ListByOrg(ctx.(context.Context), orgID)
 }
+
 func (s *adminBranchSvc) UpdateBranch(ctx interface{}, id, orgID uuid.UUID, params adminpkg.BranchParams) (*domain.Branch, error) {
-	return nil, fmt.Errorf("not implemented")
+	c := ctx.(context.Context)
+	b, err := s.store.BranchRepository.GetByID(c, id, orgID)
+	if err != nil {
+		return nil, err
+	}
+	b.Name = params.Name
+	b.UpdatedAt = time.Now()
+	return b, s.store.BranchRepository.Update(c, b)
 }
+
 func (s *adminBranchSvc) DeleteBranch(ctx interface{}, id, orgID uuid.UUID) error {
-	return fmt.Errorf("not implemented")
+	return s.store.BranchRepository.Delete(ctx.(context.Context), id, orgID)
 }
+
 func (s *adminBranchSvc) AssignUserToBranch(ctx interface{}, userID, branchID, orgID uuid.UUID, params adminpkg.UserBranchParams) (*domain.UserBranchAssignment, error) {
-	return nil, fmt.Errorf("not implemented")
+	uba := &domain.UserBranchAssignment{
+		ID:         uuid.New(),
+		OrgID:      orgID,
+		UserID:     userID,
+		BranchID:   branchID,
+		IsPrimary:  params.IsPrimary,
+		AssignedBy: params.AssignedBy,
+		AssignedAt: time.Now(),
+	}
+	return uba, s.store.UserBranchAssignmentRepository.Create(ctx.(context.Context), uba)
 }
+
 func (s *adminBranchSvc) GetUserBranches(ctx interface{}, userID uuid.UUID) ([]*domain.UserBranchAssignment, error) {
-	return nil, fmt.Errorf("not implemented")
+	return s.store.UserBranchAssignmentRepository.GetByUser(ctx.(context.Context), userID)
 }
+
 func (s *adminBranchSvc) RevokeUserBranch(ctx interface{}, assignmentID, orgID, revokedBy uuid.UUID) error {
-	return fmt.Errorf("not implemented")
+	return s.store.UserBranchAssignmentRepository.Revoke(ctx.(context.Context), assignmentID, revokedBy)
 }
