@@ -43,9 +43,10 @@ type UserStore interface {
 type CredentialStore interface {
 	Create(ctx context.Context, cred *domain.UserCredential) error
 	GetCurrentByUserID(ctx context.Context, userID uuid.UUID) (*domain.UserCredential, error)
-	GetHistory(ctx context.Context, userID uuid.UUID, limit int) ([]*domain.UserCredential, error)
-	Update(ctx context.Context, cred *domain.UserCredential) error
-	 RetireOldCredentials(ctx context.Context, userID uuid.UUID, keepCount int) error
+	GetHistory(ctx context.Context, userID uuid.UUID, limit int) ([]*domain.UserCredentialHistory, error)
+	// Replace atomically: pindahkan credential lama ke history, update dengan hash baru.
+	// keepHistoryCount: jumlah entry history yang dipertahankan per (user, type).
+	Replace(ctx context.Context, userID uuid.UUID, credentialType string, newHash string, keepHistoryCount int) error
 }
 
 type VerificationTokenStore interface {

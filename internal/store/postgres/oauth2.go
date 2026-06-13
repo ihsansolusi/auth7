@@ -158,7 +158,7 @@ func (r *OAuth2ClientRepository) ListApps(ctx context.Context) ([]*domain.AppEnt
 		       COALESCE(icon_color, '') AS icon_color
 		FROM oauth2_clients
 		WHERE is_active = true
-		  AND client_type IN ('web', 'spa')
+		  AND client_type = 'web'
 		  AND app_url IS NOT NULL AND app_url <> ''
 		ORDER BY name`
 

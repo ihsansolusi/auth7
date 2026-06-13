@@ -50,8 +50,8 @@ type User struct {
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 	DeletedAt              *time.Time `json:"deleted_at,omitempty"`
-	CreatedBy              *uuid.UUID `json:"created_by,omitempty"`
-	UpdatedBy              *uuid.UUID `json:"updated_by,omitempty"`
+	CreatedBy              string     `json:"created_by,omitempty"`
+	UpdatedBy              string     `json:"updated_by,omitempty"`
 }
 
 func (u *User) Validate() error {
@@ -110,10 +110,16 @@ type UserCredential struct {
 	UserID         uuid.UUID  `json:"user_id"`
 	CredentialType string     `json:"credential_type"`
 	SecretHash     string     `json:"secret_hash"`
-	Version        int        `json:"version"`
-	IsCurrent      bool       `json:"is_current"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+}
+
+type UserCredentialHistory struct {
+	ID             uuid.UUID `json:"id"`
+	UserID         uuid.UUID `json:"user_id"`
+	CredentialType string    `json:"credential_type"`
+	SecretHash     string    `json:"secret_hash"`
+	RetiredAt      time.Time `json:"retired_at"`
 }
 
 const CredentialTypePassword = "password"
@@ -324,6 +330,7 @@ type Branch struct {
 	ID         uuid.UUID `json:"id"`
 	OrgID      uuid.UUID `json:"org_id"`
 	BranchCode string    `json:"branch_code"`
+	Name       string    `json:"name"`
 	Active     bool      `json:"is_active"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

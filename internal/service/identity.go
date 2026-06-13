@@ -91,8 +91,6 @@ func (s *IdentityService) Register(ctx context.Context, input RegisterInput) (*R
 		UserID:         user.ID,
 		CredentialType: domain.CredentialTypePassword,
 		SecretHash:     passwordHash,
-		Version:        1,
-		IsCurrent:      true,
 		CreatedAt:      now,
 	}
 
@@ -229,33 +227,24 @@ func (s *IdentityService) ResetPassword(ctx context.Context, input ResetPassword
 		return fmt.Errorf("%s: hash password: %w", op, err)
 	}
 
-	oldCred, err := s.store.CredentialRepository.GetCurrentByUserID(ctx, user.ID)
-	version := 1
-	if err == nil {
-		oldCred.IsCurrent = false
-		now := time.Now()
-		oldCred.ExpiresAt = &now
-		version = oldCred.Version + 1
-		if err := s.store.CredentialRepository.Update(ctx, oldCred); err != nil {
-			return fmt.Errorf("%s: retire old credential: %w", op, err)
+	_, existErr := s.store.CredentialRepository.GetCurrentByUserID(ctx, user.ID)
+	if existErr == nil {
+		if err := s.store.CredentialRepository.Replace(ctx, user.ID, domain.CredentialTypePassword, passwordHash, domain.DefaultPasswordPolicy.HistoryCount); err != nil {
+			return fmt.Errorf("%s: replace credential: %w", op, err)
+		}
+	} else {
+		if err := s.store.CredentialRepository.Create(ctx, &domain.UserCredential{
+			ID:             uuid.Must(uuid.NewV7()),
+			UserID:         user.ID,
+			CredentialType: domain.CredentialTypePassword,
+			SecretHash:     passwordHash,
+			CreatedAt:      time.Now(),
+		}); err != nil {
+			return fmt.Errorf("%s: create credential: %w", op, err)
 		}
 	}
 
 	now := time.Now()
-	newCred := &domain.UserCredential{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         user.ID,
-		CredentialType: domain.CredentialTypePassword,
-		SecretHash:     passwordHash,
-		Version:        version,
-		IsCurrent:      true,
-		CreatedAt:      now,
-	}
-
-	if err := s.store.CredentialRepository.Create(ctx, newCred); err != nil {
-		return fmt.Errorf("%s: create credential: %w", op, err)
-	}
-
 	user.PasswordChangedAt = &now
 	user.UpdatedAt = now
 	user.RequirePasswordChange = false
@@ -314,27 +303,11 @@ func (s *IdentityService) ChangePassword(ctx context.Context, input ChangePasswo
 		return fmt.Errorf("%s: hash password: %w", op, err)
 	}
 
+	if err := s.store.CredentialRepository.Replace(ctx, user.ID, domain.CredentialTypePassword, passwordHash, domain.DefaultPasswordPolicy.HistoryCount); err != nil {
+		return fmt.Errorf("%s: replace credential: %w", op, err)
+	}
+
 	now := time.Now()
-	currentCred.IsCurrent = false
-	currentCred.ExpiresAt = &now
-	if err := s.store.CredentialRepository.Update(ctx, currentCred); err != nil {
-		return fmt.Errorf("%s: retire old credential: %w", op, err)
-	}
-
-	newCred := &domain.UserCredential{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         user.ID,
-		CredentialType: domain.CredentialTypePassword,
-		SecretHash:     passwordHash,
-		Version:        currentCred.Version + 1,
-		IsCurrent:      true,
-		CreatedAt:      now,
-	}
-
-	if err := s.store.CredentialRepository.Create(ctx, newCred); err != nil {
-		return fmt.Errorf("%s: create credential: %w", op, err)
-	}
-
 	user.PasswordChangedAt = &now
 	user.UpdatedAt = now
 

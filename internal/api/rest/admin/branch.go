@@ -99,7 +99,7 @@ func (h *BranchHandler) RegisterBranchRoutes(r *gin.RouterGroup) {
 
 	r.GET("/users/:id/branches", h.handleGetUserBranches)
 	r.POST("/users/:id/branches", h.handleAssignUserToBranch)
-	r.DELETE("/users/:user_id/branches/:assignment_id", h.handleRevokeUserBranch)
+	r.DELETE("/users/:id/branches/:assignment_id", h.handleRevokeUserBranch)
 }
 
 func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {

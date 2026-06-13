@@ -30,6 +30,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		startCmd(),
 		migrateCmd(),
+		seedCmd(),
 		versionCmd(),
 	)
 

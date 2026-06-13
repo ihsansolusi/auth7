@@ -34,6 +34,11 @@ func (s *Server) RegisterBranchRoutes(r *gin.Engine) {
 
 	r.GET("/auth/branches", s.handleListUserBranches)
 	r.POST("/auth/switch-branch", s.handleSwitchBranch)
+
+	// W17 cross-service lookup: pejabat picker on bos7-financing reads
+	// from this. User-JWT (delegated via BFF token exchange); org-scoped
+	// inside the handler from claims.OrgID.
+	r.POST("/v1/users/lookup/query", s.handleUserLookup)
 }
 
 func (s *Server) handleListBranchTypes(c *gin.Context) {

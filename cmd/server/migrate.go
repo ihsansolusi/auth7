@@ -130,6 +130,10 @@ func runMigrateVersion(cmd *cobra.Command, args []string) error {
 	defer m.Close()
 
 	version, dirty, err := m.Version()
+	if err == migrate.ErrNilVersion {
+		logger.Info().Msg("no migrations applied yet (version: none)")
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("get version: %w", err)
 	}

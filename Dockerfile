@@ -36,6 +36,7 @@ WORKDIR /app
 COPY --from=builder /app/bin/auth7 .
 COPY configs/config.example.yaml configs/config.yaml
 COPY migrations/ migrations/
+COPY migrations-seed/ migrations-seed/
 COPY scripts/ scripts/
 
 RUN apk --no-cache add ca-certificates postgresql-client && \

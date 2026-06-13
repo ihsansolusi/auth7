@@ -145,8 +145,6 @@ func (h *AuthHandler) HandleRegister(c *gin.Context) {
 		UserID:         user.ID,
 		CredentialType: domain.CredentialTypePassword,
 		SecretHash:     passwordHash,
-		Version:        1,
-		IsCurrent:      true,
 		CreatedAt:      now,
 	}
 
@@ -686,25 +684,8 @@ func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
 		return
 	}
 
-	cred.IsCurrent = false
-	cred.ExpiresAt = func() *time.Time { t := time.Now(); return &t }()
-	if err := h.store.CredentialRepository.Update(c.Request.Context(), cred); err != nil {
+	if err := h.store.CredentialRepository.Replace(c.Request.Context(), userID, domain.CredentialTypePassword, newHash, domain.DefaultPasswordPolicy.HistoryCount); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update credential"})
-		return
-	}
-
-	newCred := &domain.UserCredential{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         userID,
-		CredentialType: domain.CredentialTypePassword,
-		SecretHash:     newHash,
-		Version:        cred.Version + 1,
-		IsCurrent:      true,
-		CreatedAt:      time.Now(),
-	}
-
-	if err := h.store.CredentialRepository.Create(c.Request.Context(), newCred); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create new credential"})
 		return
 	}
 
@@ -814,26 +795,23 @@ func (h *AuthHandler) HandleResetPassword(c *gin.Context) {
 		return
 	}
 
-	cred, err := h.store.CredentialRepository.GetCurrentByUserID(c.Request.Context(), vt.UserID)
-	if err == nil && cred != nil {
-		cred.IsCurrent = false
-		cred.ExpiresAt = func() *time.Time { t := time.Now(); return &t }()
-		h.store.CredentialRepository.Update(c.Request.Context(), cred)
-	}
-
-	newCred := &domain.UserCredential{
-		ID:             uuid.Must(uuid.NewV7()),
-		UserID:         vt.UserID,
-		CredentialType: domain.CredentialTypePassword,
-		SecretHash:     newHash,
-		Version:        1,
-		IsCurrent:      true,
-		CreatedAt:      time.Now(),
-	}
-
-	if err := h.store.CredentialRepository.Create(c.Request.Context(), newCred); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
-		return
+	_, existErr := h.store.CredentialRepository.GetCurrentByUserID(c.Request.Context(), vt.UserID)
+	if existErr == nil {
+		if err := h.store.CredentialRepository.Replace(c.Request.Context(), vt.UserID, domain.CredentialTypePassword, newHash, domain.DefaultPasswordPolicy.HistoryCount); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+			return
+		}
+	} else {
+		if err := h.store.CredentialRepository.Create(c.Request.Context(), &domain.UserCredential{
+			ID:             uuid.Must(uuid.NewV7()),
+			UserID:         vt.UserID,
+			CredentialType: domain.CredentialTypePassword,
+			SecretHash:     newHash,
+			CreatedAt:      time.Now(),
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+			return
+		}
 	}
 
 	h.store.VerificationTokenRepository.MarkUsed(c.Request.Context(), vt.ID)
