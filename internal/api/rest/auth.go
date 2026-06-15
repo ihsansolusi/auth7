@@ -338,8 +338,10 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 			TokenID:   claims.SessionID,
 			OrgID:     claims.OrgID,
 			UserID:    claims.Subject,
+			Username:  claims.Username,
 			RevokedBy: claims.Subject,
 			Reason:    "logout",
+			IPAddress: c.ClientIP(),
 			RevokedAt: time.Now(),
 		})
 		_ = h.eventPub.PublishSessionTerminated(c.Request.Context(), nats.SessionTerminatedEvent{

@@ -16,8 +16,10 @@ type TokenRevokedEvent struct {
 	TokenID   string    `json:"token_id"`
 	OrgID     string    `json:"org_id"`
 	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
 	RevokedBy string    `json:"revoked_by"`
 	Reason    string    `json:"reason"`
+	IPAddress string    `json:"ip_address"`
 	RevokedAt time.Time `json:"revoked_at"`
 }
 
