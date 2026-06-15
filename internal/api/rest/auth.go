@@ -299,6 +299,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 			SessionID: result.SessionID,
 			OrgID:     orgID.String(),
 			UserID:    user.ID.String(),
+			Username:  user.Username,
 			IPAddress: ipAddress,
 			CreatedAt: time.Now(),
 		})
@@ -345,7 +346,9 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 			SessionID:    claims.SessionID,
 			OrgID:        claims.OrgID,
 			UserID:       claims.Subject,
+			Username:     claims.Username,
 			Reason:       "logout",
+			IPAddress:    c.ClientIP(),
 			TerminatedAt: time.Now(),
 		})
 	}

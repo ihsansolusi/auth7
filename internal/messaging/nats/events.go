@@ -32,6 +32,7 @@ type SessionCreatedEvent struct {
 	SessionID string    `json:"session_id"`
 	OrgID     string    `json:"org_id"`
 	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
 	IPAddress string    `json:"ip_address"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -40,7 +41,9 @@ type SessionTerminatedEvent struct {
 	SessionID    string    `json:"session_id"`
 	OrgID        string    `json:"org_id"`
 	UserID       string    `json:"user_id"`
+	Username     string    `json:"username"`
 	Reason       string    `json:"reason"`
+	IPAddress    string    `json:"ip_address"`
 	TerminatedAt time.Time `json:"terminated_at"`
 }
 
