@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 )
@@ -28,10 +29,21 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine) {
 		return
 	}
 
+	auditSvc := audit.NewService(audit.NewPGStore(store.Pool()))
+
 	internalV1 := r.Group("/internal/v1")
 	internalV1.Use(m2mOnlyMW(jwtSvc))
 
 	internalV1.GET("/user-context/:user_id", s.handleInternalUserContext(store))
+
+	// workflow7 service-task callbacks for the user lifecycle + assignments.
+	newUserWfHandler(
+		newAdminUserSvc(store),
+		newAdminUserRoleSvc(store),
+		newAdminBranchSvc(store),
+		auditSvc,
+		s.deps.Logger,
+	).registerRoutes(internalV1)
 }
 
 // m2mOnlyMW verifies the Bearer token against auth7's own JWT service and
