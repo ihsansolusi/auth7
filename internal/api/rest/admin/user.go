@@ -27,6 +27,7 @@ type CreateUserInput struct {
 	Username              string
 	Email                 string
 	FullName              string
+	PreferredLocale       string
 	Password              string
 	RequirePasswordChange bool
 	CreatedBy             uuid.UUID

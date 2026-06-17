@@ -220,6 +220,7 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 		Username:              dataStr(env.Data, "username"),
 		Email:                 dataStr(env.Data, "email"),
 		FullName:              dataStr(env.Data, "full_name"),
+		PreferredLocale:       dataStr(env.Data, "preferred_locale"),
 		Password:              plainPassword,
 		RequirePasswordChange: requireChange,
 		CreatedBy:             actorID,

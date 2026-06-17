@@ -423,12 +423,17 @@ func (s *adminUserSvc) GetUser(ctx interface{}, id, _ uuid.UUID) (*domain.User, 
 func (s *adminUserSvc) CreateUser(ctx interface{}, orgID uuid.UUID, input adminpkg.CreateUserInput) (*domain.User, error) {
 	c := ctx.(context.Context)
 	now := time.Now()
+	locale := input.PreferredLocale
+	if locale != "id" && locale != "en" {
+		locale = "id" // preferred_locale is an enum (id|en); never insert ""
+	}
 	user := &domain.User{
 		ID:                    uuid.Must(uuid.NewV7()),
 		OrgID:                 orgID,
 		Username:              input.Username,
 		Email:                 input.Email,
 		FullName:              input.FullName,
+		PreferredLocale:       locale,
 		Status:                domain.UserStatusActive,
 		RequirePasswordChange: input.RequirePasswordChange,
 		CreatedAt:             now,
