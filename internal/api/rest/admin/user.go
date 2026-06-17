@@ -24,11 +24,12 @@ type UserService interface {
 }
 
 type CreateUserInput struct {
-	Username  string
-	Email     string
-	FullName  string
-	Password  string
-	CreatedBy uuid.UUID
+	Username              string
+	Email                 string
+	FullName              string
+	Password              string
+	RequirePasswordChange bool
+	CreatedBy             uuid.UUID
 }
 
 type UpdateUserInput struct {

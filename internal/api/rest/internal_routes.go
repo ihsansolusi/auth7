@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/mailer"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
@@ -17,7 +18,7 @@ import (
 //
 // The endpoints here MUST NOT be reachable by user JWTs — m2mOnlyMW enforces
 // that. Add user-facing reads to /admin/v1 (JWT + AdminAuth) instead.
-func (s *Server) RegisterInternalV1Routes(r *gin.Engine) {
+func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	store, ok := s.deps.Store.(*postgres.Store)
 	if !ok {
 		s.deps.Logger.Warn().Msg("internal routes: store type assertion failed, skipping")
@@ -43,6 +44,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine) {
 		newAdminBranchSvc(store),
 		store,
 		auditSvc,
+		m,
 		s.deps.Logger,
 	).registerRoutes(internalV1)
 }

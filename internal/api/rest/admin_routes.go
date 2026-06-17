@@ -16,6 +16,7 @@ import (
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
+	"github.com/ihsansolusi/auth7/internal/service/password"
 	sessionpkg "github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 )
@@ -392,9 +393,14 @@ func (s *Server) handleAppsQuery(store *postgres.Store) gin.HandlerFunc {
 
 // ── adminUserSvc ──────────────────────────────────────────────────────────────
 
-type adminUserSvc struct{ store *postgres.Store }
+type adminUserSvc struct {
+	store  *postgres.Store
+	hasher *password.Hasher
+}
 
-func newAdminUserSvc(s *postgres.Store) *adminUserSvc { return &adminUserSvc{store: s} }
+func newAdminUserSvc(s *postgres.Store) *adminUserSvc {
+	return &adminUserSvc{store: s, hasher: password.NewHasher(password.DefaultConfig())}
+}
 
 func (s *adminUserSvc) ListUsers(ctx interface{}, orgID uuid.UUID, limit, offset int, status string) ([]*domain.User, int, error) {
 	users, total, err := s.store.UserRepository.ListByOrg(ctx.(context.Context), orgID, limit, offset)
@@ -415,18 +421,41 @@ func (s *adminUserSvc) GetUser(ctx interface{}, id, _ uuid.UUID) (*domain.User, 
 }
 
 func (s *adminUserSvc) CreateUser(ctx interface{}, orgID uuid.UUID, input adminpkg.CreateUserInput) (*domain.User, error) {
+	c := ctx.(context.Context)
 	now := time.Now()
 	user := &domain.User{
-		ID:        uuid.Must(uuid.NewV7()),
-		OrgID:     orgID,
-		Username:  input.Username,
-		Email:     input.Email,
-		FullName:  input.FullName,
-		Status:    domain.UserStatusActive,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                    uuid.Must(uuid.NewV7()),
+		OrgID:                 orgID,
+		Username:              input.Username,
+		Email:                 input.Email,
+		FullName:              input.FullName,
+		Status:                domain.UserStatusActive,
+		RequirePasswordChange: input.RequirePasswordChange,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
-	return user, s.store.UserRepository.Create(ctx.(context.Context), user)
+	if err := s.store.UserRepository.Create(c, user); err != nil {
+		return nil, err
+	}
+	// Persist the initial password credential so the account can actually sign
+	// in. (Earlier this was skipped, leaving admin-created users loginless.)
+	if input.Password != "" {
+		hash, err := s.hasher.Hash(input.Password)
+		if err != nil {
+			return nil, err
+		}
+		cred := &domain.UserCredential{
+			ID:             uuid.Must(uuid.NewV7()),
+			UserID:         user.ID,
+			CredentialType: domain.CredentialTypePassword,
+			SecretHash:     hash,
+			CreatedAt:      now,
+		}
+		if err := s.store.CredentialRepository.Create(c, cred); err != nil {
+			return nil, err
+		}
+	}
+	return user, nil
 }
 
 func (s *adminUserSvc) UpdateUser(ctx interface{}, id, _ uuid.UUID, input adminpkg.UpdateUserInput) (*domain.User, error) {

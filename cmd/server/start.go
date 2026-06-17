@@ -231,7 +231,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	server.RegisterRoutes(r, deps)
 
 	server.RegisterAdminV1Routes(r)
-	server.RegisterInternalV1Routes(r)
+	server.RegisterInternalV1Routes(r, mailerSvc)
 
 	sm := shutdown.New(10*time.Second, logger)
 	sm.Register("tracer", func(ctx context.Context) error {

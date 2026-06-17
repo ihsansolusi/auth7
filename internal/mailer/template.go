@@ -8,10 +8,12 @@ import (
 )
 
 type templateData struct {
-	Title   string
-	Body    string
-	Code    string
-	RefURL  string
+	Title    string
+	Body     string
+	Code     string
+	RefURL   string
+	Username string
+	Password string
 }
 
 var verifyTpl = template.Must(template.New("verify").Parse(`<!DOCTYPE html>
@@ -62,6 +64,26 @@ func RenderOTPEmail(title, code string) (string, error) {
 	var buf bytes.Buffer
 	if err := otpTpl.Execute(&buf, templateData{Title: title, Code: code}); err != nil {
 		return "", fmt.Errorf("render OTP template: %w", err)
+	}
+	return buf.String(), nil
+}
+
+var newAccountTpl = template.Must(template.New("newaccount").Parse(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{{.Title}}</title></head>
+<body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+  <h2 style="color:#1a365d">{{.Title}}</h2>
+  <p style="color:#4a5568">Akun Anda telah dibuat. Gunakan kredensial berikut untuk masuk pertama kali:</p>
+  <p style="color:#4a5568">Username: <b>{{.Username}}</b></p>
+  <p style="color:#4a5568">Password sementara:</p>
+  <p style="font-size:20px;font-weight:bold;color:#1a365d;letter-spacing:2px;text-align:center;padding:16px;background:#f7fafc;border-radius:8px;font-family:monospace">{{.Password}}</p>
+  <p style="color:#4a5568">Anda akan diminta mengganti password ini saat login pertama.</p>
+  <p style="color:#a0aec0;font-size:12px;margin-top:32px">Auth7 — Core7 Identity Platform</p>
+</body></html>`))
+
+func RenderNewAccountEmail(title, username, tempPassword string) (string, error) {
+	var buf bytes.Buffer
+	if err := newAccountTpl.Execute(&buf, templateData{Title: title, Username: username, Password: tempPassword}); err != nil {
+		return "", fmt.Errorf("render new account template: %w", err)
 	}
 	return buf.String(), nil
 }

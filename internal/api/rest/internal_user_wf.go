@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 	"github.com/google/uuid"
 	adminpkg "github.com/ihsansolusi/auth7/internal/api/rest/admin"
 	"github.com/ihsansolusi/auth7/internal/domain"
+	"github.com/ihsansolusi/auth7/internal/mailer"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
+	"github.com/ihsansolusi/auth7/internal/service/password"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
 	"github.com/rs/zerolog"
 )
@@ -51,6 +54,7 @@ type userWfHandler struct {
 	branchSvc   *adminBranchSvc
 	store       *postgres.Store
 	auditSvc    *audit.Service
+	mailer      mailer.Mailer
 	logger      zerolog.Logger
 }
 
@@ -60,6 +64,7 @@ func newUserWfHandler(
 	branchSvc *adminBranchSvc,
 	store *postgres.Store,
 	auditSvc *audit.Service,
+	m mailer.Mailer,
 	logger zerolog.Logger,
 ) *userWfHandler {
 	return &userWfHandler{
@@ -68,6 +73,7 @@ func newUserWfHandler(
 		branchSvc:   branchSvc,
 		store:       store,
 		auditSvc:    auditSvc,
+		mailer:      m,
 		logger:      logger,
 	}
 }
@@ -102,6 +108,16 @@ func dataStr(m map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+func dataBool(m map[string]any, key string) bool {
+	if m == nil {
+		return false
+	}
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return false
 }
 
 func dataStrPtr(m map[string]any, key string) *string {
@@ -190,12 +206,23 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 	if !ok {
 		return
 	}
+
+	// Password handling: either the admin-provided password, or an
+	// auto-generated one. `require_password_change` forces a reset at first login.
+	plainPassword := dataStr(env.Data, "password")
+	autoGenerate := dataBool(env.Data, "auto_generate_password")
+	requireChange := dataBool(env.Data, "require_password_change")
+	if autoGenerate {
+		plainPassword = password.Generate()
+	}
+
 	input := adminpkg.CreateUserInput{
-		Username:  dataStr(env.Data, "username"),
-		Email:     dataStr(env.Data, "email"),
-		FullName:  dataStr(env.Data, "full_name"),
-		Password:  dataStr(env.Data, "password"),
-		CreatedBy: actorID,
+		Username:              dataStr(env.Data, "username"),
+		Email:                 dataStr(env.Data, "email"),
+		FullName:              dataStr(env.Data, "full_name"),
+		Password:              plainPassword,
+		RequirePasswordChange: requireChange,
+		CreatedBy:             actorID,
 	}
 	user, err := h.userSvc.CreateUser(c.Request.Context(), orgID, input)
 	if err != nil {
@@ -227,8 +254,28 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 		}
 	}
 
+	// Email the temporary password to the user (best-effort, async). Only for
+	// the auto-generate path — a manually-set password is communicated by the admin.
+	if autoGenerate && user.Email != "" && h.mailer != nil {
+		email, uname, pw := user.Email, user.Username, plainPassword
+		go func() {
+			html, rerr := mailer.RenderNewAccountEmail("Akun Auth7 Anda", uname, pw)
+			if rerr != nil {
+				return
+			}
+			_ = h.mailer.Send(context.Background(), email, "Akun Auth7 Anda — Password Sementara", html)
+		}()
+	}
+
 	h.audit(orgID, actorID, actorEmail, "create_user", "user", user.ID.String(), nil, wfUserToJSON(user))
-	c.JSON(http.StatusOK, gin.H{"id": user.ID.String(), "success": true})
+
+	resp := gin.H{"id": user.ID.String(), "success": true}
+	// Surface the generated password ONCE so the admin can relay it. Captured by
+	// the workflow on_complete_vars and read back by the BFF for a one-time display.
+	if autoGenerate {
+		resp["generated_password"] = plainPassword
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *userWfHandler) handleWfUpdate(c *gin.Context) {

@@ -55,6 +55,7 @@ func (h *AuthHandler) RegisterRoutes(r *gin.Engine) {
 		auth.GET("/me", h.HandleMe)
 		auth.PUT("/profile", h.HandleUpdateProfile)
 		auth.POST("/change-password", h.HandleChangePassword)
+		auth.POST("/change-password-initial", h.HandleInitialChangePassword)
 		auth.POST("/forgot-password", h.HandleForgotPassword)
 		auth.POST("/reset-password", h.HandleResetPassword)
 	}
@@ -232,6 +233,17 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	if !h.hasher.Verify(req.Password, cred.SecretHash) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	// Force a password change before issuing any tokens. The client must call
+	// /v1/auth/change-password-initial, then retry login.
+	if user.RequirePasswordChange {
+		c.JSON(http.StatusOK, gin.H{
+			"must_change_password": true,
+			"user_id":              user.ID.String(),
+			"username":             user.Username,
+		})
 		return
 	}
 
@@ -698,9 +710,83 @@ func (h *AuthHandler) HandleChangePassword(c *gin.Context) {
 	if err == nil && user != nil {
 		now := time.Now()
 		user.PasswordChangedAt = &now
+		user.RequirePasswordChange = false
 		user.UpdatedAt = now
 		h.store.UserRepository.Update(c.Request.Context(), user)
 	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// InitialChangePasswordRequest — unauthenticated first-login password change.
+// The user is blocked at login by RequirePasswordChange (no token issued yet),
+// so this verifies the current (temporary) password directly by username.
+type InitialChangePasswordRequest struct {
+	Username        string `json:"username" binding:"required"`
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+}
+
+func (h *AuthHandler) HandleInitialChangePassword(c *gin.Context) {
+	var req InitialChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	usernameOrEmail := strings.TrimSpace(req.Username)
+	var (
+		user *domain.User
+		err  error
+	)
+	if strings.Contains(usernameOrEmail, "@") {
+		user, err = h.store.UserRepository.GetByEmail(c.Request.Context(), domain.NormalizeEmail(usernameOrEmail))
+	} else {
+		user, err = h.store.UserRepository.GetByUsername(c.Request.Context(), usernameOrEmail)
+	}
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	// Only valid while the account is flagged for a forced change; otherwise the
+	// authenticated /change-password endpoint must be used.
+	if !user.RequirePasswordChange {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "password change not required"})
+		return
+	}
+
+	cred, err := h.store.CredentialRepository.GetCurrentByUserID(c.Request.Context(), user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get credential"})
+		return
+	}
+	if !h.hasher.Verify(req.CurrentPassword, cred.SecretHash) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	if err := domain.DefaultPasswordPolicy.Validate(req.NewPassword, user.Username, user.Email); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newHash, err := h.hasher.Hash(req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	if err := h.store.CredentialRepository.Replace(c.Request.Context(), user.ID, domain.CredentialTypePassword, newHash, domain.DefaultPasswordPolicy.HistoryCount); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update credential"})
+		return
+	}
+
+	now := time.Now()
+	user.PasswordChangedAt = &now
+	user.RequirePasswordChange = false
+	user.UpdatedAt = now
+	h.store.UserRepository.Update(c.Request.Context(), user)
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
