@@ -9,6 +9,7 @@ import (
 	adminpkg "github.com/ihsansolusi/auth7/internal/api/rest/admin"
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
+	"github.com/ihsansolusi/auth7/internal/store/postgres"
 	"github.com/rs/zerolog"
 )
 
@@ -40,10 +41,15 @@ func wfUserToJSON(u *domain.User) domain.JSON {
 // Unlike the /admin/v1 handlers, org_id and the acting user are NOT taken from
 // a user JWT (the caller is workflow7's M2M token). They travel inside `data`,
 // injected by the BFF from the initiator's JWT before the workflow was started.
+//
+// Assignments use REPLACE-the-whole-set semantics (master-detail): wf-set-roles
+// and wf-set-branches receive the full desired set and reconcile against the
+// current active rows. Roles are org-wide only (branch_id NULL).
 type userWfHandler struct {
 	userSvc     *adminUserSvc
 	userRoleSvc *adminUserRoleSvc
 	branchSvc   *adminBranchSvc
+	store       *postgres.Store
 	auditSvc    *audit.Service
 	logger      zerolog.Logger
 }
@@ -52,6 +58,7 @@ func newUserWfHandler(
 	userSvc *adminUserSvc,
 	userRoleSvc *adminUserRoleSvc,
 	branchSvc *adminBranchSvc,
+	store *postgres.Store,
 	auditSvc *audit.Service,
 	logger zerolog.Logger,
 ) *userWfHandler {
@@ -59,6 +66,7 @@ func newUserWfHandler(
 		userSvc:     userSvc,
 		userRoleSvc: userRoleSvc,
 		branchSvc:   branchSvc,
+		store:       store,
 		auditSvc:    auditSvc,
 		logger:      logger,
 	}
@@ -72,10 +80,8 @@ func (h *userWfHandler) registerRoutes(g *gin.RouterGroup) {
 		users.POST("/:id/wf-delete", h.handleWfDelete)
 		users.POST("/:id/wf-lock", h.handleWfLock)
 		users.POST("/:id/wf-unlock", h.handleWfUnlock)
-		users.POST("/:id/wf-assign-role", h.handleWfAssignRole)
-		users.POST("/:id/wf-revoke-role", h.handleWfRevokeRole)
-		users.POST("/:id/wf-assign-branch", h.handleWfAssignBranch)
-		users.POST("/:id/wf-revoke-branch", h.handleWfRevokeBranch)
+		users.POST("/:id/wf-set-roles", h.handleWfSetRoles)
+		users.POST("/:id/wf-set-branches", h.handleWfSetBranches)
 	}
 }
 
@@ -98,16 +104,6 @@ func dataStr(m map[string]any, key string) string {
 	return ""
 }
 
-func dataBool(m map[string]any, key string) bool {
-	if m == nil {
-		return false
-	}
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
-}
-
 func dataStrPtr(m map[string]any, key string) *string {
 	if m == nil {
 		return nil
@@ -121,6 +117,24 @@ func dataStrPtr(m map[string]any, key string) *string {
 		return nil
 	}
 	return &v
+}
+
+// dataMaps extracts an array-of-objects field (e.g. data.roles = [{role_id}]).
+func dataMaps(m map[string]any, key string) []map[string]any {
+	out := []map[string]any{}
+	if m == nil {
+		return out
+	}
+	arr, ok := m[key].([]any)
+	if !ok {
+		return out
+	}
+	for _, it := range arr {
+		if mm, ok := it.(map[string]any); ok {
+			out = append(out, mm)
+		}
+	}
+	return out
 }
 
 // bindEnvelope parses the workflow envelope and resolves org_id + actor from data.
@@ -168,6 +182,9 @@ func wfFail(c *gin.Context, logger zerolog.Logger, err error, msg string) {
 
 // ── user lifecycle ──────────────────────────────────────────────────────────
 
+// handleWfCreate creates the user and, atomically within the same callback,
+// applies the initial org-wide roles (data.roles = [{role_id}]) and the primary
+// branch (data.primary_branch_id). A failure in any step fails the workflow step.
 func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
 	if !ok {
@@ -185,6 +202,31 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf create user failed")
 		return
 	}
+
+	// Initial org-wide role assignments.
+	for _, rm := range dataMaps(env.Data, "roles") {
+		rid, perr := uuid.Parse(dataStr(rm, "role_id"))
+		if perr != nil {
+			continue
+		}
+		if _, aerr := h.userRoleSvc.AssignRole(c.Request.Context(), user.ID, rid, orgID, nil, actorID); aerr != nil {
+			wfFail(c, h.logger, aerr, "wf create: assign role failed")
+			return
+		}
+	}
+
+	// Primary branch assignment.
+	if pb := dataStr(env.Data, "primary_branch_id"); pb != "" {
+		bid, perr := uuid.Parse(pb)
+		if perr == nil {
+			if _, berr := h.branchSvc.AssignUserToBranch(c.Request.Context(), user.ID, bid, orgID,
+				adminpkg.UserBranchParams{BranchID: bid, IsPrimary: true, AssignedBy: actorID}); berr != nil {
+				wfFail(c, h.logger, berr, "wf create: assign primary branch failed")
+				return
+			}
+		}
+	}
+
 	h.audit(orgID, actorID, actorEmail, "create_user", "user", user.ID.String(), nil, wfUserToJSON(user))
 	c.JSON(http.StatusOK, gin.H{"id": user.ID.String(), "success": true})
 }
@@ -269,9 +311,9 @@ func (h *userWfHandler) statusChange(c *gin.Context, action string, fn func(*gin
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
-// ── role assignment ─────────────────────────────────────────────────────────
+// ── role assignment (replace whole set, org-wide only) ──────────────────────
 
-func (h *userWfHandler) handleWfAssignRole(c *gin.Context) {
+func (h *userWfHandler) handleWfSetRoles(c *gin.Context) {
 	userID, ok := paramID(c)
 	if !ok {
 		return
@@ -280,54 +322,51 @@ func (h *userWfHandler) handleWfAssignRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	roleID, err := uuid.Parse(dataStr(env.Data, "role_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role_id", "success": false})
-		return
-	}
-	var branchID *uuid.UUID
-	if b := dataStr(env.Data, "branch_id"); b != "" {
-		if bid, perr := uuid.Parse(b); perr == nil {
-			branchID = &bid
+
+	desired := map[uuid.UUID]bool{}
+	for _, rm := range dataMaps(env.Data, "roles") {
+		if rid, perr := uuid.Parse(dataStr(rm, "role_id")); perr == nil {
+			desired[rid] = true
 		}
 	}
-	ur, err := h.userRoleSvc.AssignRole(c.Request.Context(), userID, roleID, orgID, branchID, actorID)
-	if err != nil {
-		wfFail(c, h.logger, err, "wf assign role failed")
-		return
-	}
-	h.audit(orgID, actorID, actorEmail, "assign_role", "user_role", userID.String(), nil, domain.JSON{
-		"role_id":   roleID.String(),
-		"branch_id": dataStr(env.Data, "branch_id"),
-	})
-	c.JSON(http.StatusOK, gin.H{"id": ur.ID.String(), "success": true})
-}
 
-func (h *userWfHandler) handleWfRevokeRole(c *gin.Context) {
-	userID, ok := paramID(c)
-	if !ok {
-		return
-	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
-	if !ok {
-		return
-	}
-	roleID, err := uuid.Parse(dataStr(env.Data, "role_id"))
+	current, err := h.userRoleSvc.GetUserRoles(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role_id", "success": false})
+		wfFail(c, h.logger, err, "wf set roles: load current failed")
 		return
 	}
-	if err := h.userRoleSvc.RevokeRole(c.Request.Context(), userID, roleID, orgID, actorID); err != nil {
-		wfFail(c, h.logger, err, "wf revoke role failed")
-		return
+	currentSet := map[uuid.UUID]bool{}
+	for _, ur := range current {
+		// Reconcile org-wide assignments only (branch_id NULL, active).
+		if ur.RevokedAt == nil && ur.BranchID == nil {
+			currentSet[ur.RoleID] = true
+		}
 	}
-	h.audit(orgID, actorID, actorEmail, "revoke_role", "user_role", userID.String(), domain.JSON{"role_id": roleID.String()}, nil)
+
+	for rid := range currentSet {
+		if !desired[rid] {
+			if rerr := h.userRoleSvc.RevokeRole(c.Request.Context(), userID, rid, orgID, actorID); rerr != nil {
+				wfFail(c, h.logger, rerr, "wf set roles: revoke failed")
+				return
+			}
+		}
+	}
+	for rid := range desired {
+		if !currentSet[rid] {
+			if _, aerr := h.userRoleSvc.AssignRole(c.Request.Context(), userID, rid, orgID, nil, actorID); aerr != nil {
+				wfFail(c, h.logger, aerr, "wf set roles: assign failed")
+				return
+			}
+		}
+	}
+
+	h.audit(orgID, actorID, actorEmail, "set_roles", "user_role", userID.String(), nil, domain.JSON{"count": len(desired)})
 	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }
 
-// ── branch assignment ───────────────────────────────────────────────────────
+// ── branch assignment (replace whole set; exactly one primary) ──────────────
 
-func (h *userWfHandler) handleWfAssignBranch(c *gin.Context) {
+func (h *userWfHandler) handleWfSetBranches(c *gin.Context) {
 	userID, ok := paramID(c)
 	if !ok {
 		return
@@ -336,46 +375,104 @@ func (h *userWfHandler) handleWfAssignBranch(c *gin.Context) {
 	if !ok {
 		return
 	}
-	branchID, err := uuid.Parse(dataStr(env.Data, "branch_id"))
+
+	primaryStr := dataStr(env.Data, "primary_branch_id")
+	primaryID, err := uuid.Parse(primaryStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid branch_id", "success": false})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "primary_branch_id required", "success": false})
 		return
 	}
-	params := adminpkg.UserBranchParams{
-		BranchID:   branchID,
-		IsPrimary:  dataBool(env.Data, "is_primary"),
-		AssignedBy: actorID,
+	// desired branch_id -> isPrimary. Primary first; secondaries default non-primary.
+	desired := map[uuid.UUID]bool{primaryID: true}
+	for _, bm := range dataMaps(env.Data, "branches") {
+		if bid, perr := uuid.Parse(dataStr(bm, "branch_id")); perr == nil {
+			if _, exists := desired[bid]; !exists {
+				desired[bid] = false
+			}
+		}
 	}
-	uba, err := h.branchSvc.AssignUserToBranch(c.Request.Context(), userID, branchID, orgID, params)
+
+	ctx := c.Request.Context()
+	tx, err := h.store.Pool().Begin(ctx)
 	if err != nil {
-		wfFail(c, h.logger, err, "wf assign branch failed")
+		wfFail(c, h.logger, err, "wf set branches: begin tx failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "assign_branch", "user_branch", userID.String(), nil, domain.JSON{
-		"branch_id":  branchID.String(),
-		"is_primary": params.IsPrimary,
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// 1) Clear every active primary flag so a new primary can be set without
+	//    colliding with the partial unique (user_id, is_primary) WHERE is_primary.
+	if _, err = tx.Exec(ctx,
+		`UPDATE user_branch_assignments SET is_primary = false WHERE user_id = $1 AND revoked_at IS NULL`,
+		userID); err != nil {
+		wfFail(c, h.logger, err, "wf set branches: clear primary failed")
+		return
+	}
+
+	// 2) Revoke active assignments no longer desired.
+	rows, err := tx.Query(ctx,
+		`SELECT branch_id FROM user_branch_assignments WHERE user_id = $1 AND revoked_at IS NULL`, userID)
+	if err != nil {
+		wfFail(c, h.logger, err, "wf set branches: load current failed")
+		return
+	}
+	var activeIDs []uuid.UUID
+	for rows.Next() {
+		var bid uuid.UUID
+		if scanErr := rows.Scan(&bid); scanErr != nil {
+			rows.Close()
+			wfFail(c, h.logger, scanErr, "wf set branches: scan failed")
+			return
+		}
+		activeIDs = append(activeIDs, bid)
+	}
+	rows.Close()
+	if rows.Err() != nil {
+		wfFail(c, h.logger, rows.Err(), "wf set branches: rows error")
+		return
+	}
+	actorStr := actorID.String()
+	for _, bid := range activeIDs {
+		if _, exists := desired[bid]; !exists {
+			if _, err = tx.Exec(ctx,
+				`UPDATE user_branch_assignments SET revoked_at = NOW(), revoked_by = $2 WHERE user_id = $1 AND branch_id = $3 AND revoked_at IS NULL`,
+				userID, actorStr, bid); err != nil {
+				wfFail(c, h.logger, err, "wf set branches: revoke failed")
+				return
+			}
+		}
+	}
+
+	// 3) Upsert every desired branch as non-primary (reactivates revoked rows;
+	//    Create's plain ON CONFLICT DO NOTHING cannot reactivate, so use DO UPDATE).
+	for bid := range desired {
+		if _, err = tx.Exec(ctx,
+			`INSERT INTO user_branch_assignments (id, org_id, user_id, branch_id, is_primary, assigned_by, assigned_at)
+			 VALUES ($1, $2, $3, $4, false, $5, NOW())
+			 ON CONFLICT (user_id, branch_id) DO UPDATE
+			 SET is_primary = false, revoked_at = NULL, revoked_by = NULL, assigned_by = EXCLUDED.assigned_by, assigned_at = NOW()`,
+			uuid.New(), orgID, userID, bid, actorStr); err != nil {
+			wfFail(c, h.logger, err, "wf set branches: upsert failed")
+			return
+		}
+	}
+
+	// 4) Set the single primary last.
+	if _, err = tx.Exec(ctx,
+		`UPDATE user_branch_assignments SET is_primary = true WHERE user_id = $1 AND branch_id = $2 AND revoked_at IS NULL`,
+		userID, primaryID); err != nil {
+		wfFail(c, h.logger, err, "wf set branches: set primary failed")
+		return
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		wfFail(c, h.logger, err, "wf set branches: commit failed")
+		return
+	}
+
+	h.audit(orgID, actorID, actorEmail, "set_branches", "user_branch", userID.String(), nil, domain.JSON{
+		"primary_branch_id": primaryStr,
+		"count":             len(desired),
 	})
-	c.JSON(http.StatusOK, gin.H{"id": uba.ID.String(), "success": true})
-}
-
-func (h *userWfHandler) handleWfRevokeBranch(c *gin.Context) {
-	userID, ok := paramID(c)
-	if !ok {
-		return
-	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
-	if !ok {
-		return
-	}
-	assignmentID, err := uuid.Parse(dataStr(env.Data, "assignment_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment_id", "success": false})
-		return
-	}
-	if err := h.branchSvc.RevokeUserBranch(c.Request.Context(), assignmentID, orgID, actorID); err != nil {
-		wfFail(c, h.logger, err, "wf revoke branch failed")
-		return
-	}
-	h.audit(orgID, actorID, actorEmail, "revoke_branch", "user_branch", userID.String(), domain.JSON{"assignment_id": assignmentID.String()}, nil)
-	c.JSON(http.StatusOK, gin.H{"id": assignmentID.String(), "success": true})
+	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }

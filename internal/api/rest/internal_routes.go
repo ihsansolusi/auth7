@@ -41,6 +41,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine) {
 		newAdminUserSvc(store),
 		newAdminUserRoleSvc(store),
 		newAdminBranchSvc(store),
+		store,
 		auditSvc,
 		s.deps.Logger,
 	).registerRoutes(internalV1)
