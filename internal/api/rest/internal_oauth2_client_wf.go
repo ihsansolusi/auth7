@@ -66,16 +66,27 @@ func dataStrSlice(m map[string]any, key string) []string {
 	return out
 }
 
-func (h *oauth2ClientWfHandler) audit(orgID, actorID uuid.UUID, actorEmail, action, resourceID string, oldV, newV domain.JSON) {
+// audit records the mutation locally and forwards it to audit7, populating the
+// request context (ip/ua/branch/session) from the workflow `data` payload that
+// the bos7 BFF injects via withInitiator; correlation_id = the wf instance id.
+// Mirrors userWfHandler.audit so client CRUD carries the same context as user
+// CRUD.
+func (h *oauth2ClientWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
-		OrgID:        orgID,
-		ActorID:      actorID,
-		ActorEmail:   actorEmail,
-		Action:       action,
-		ResourceType: "oauth2_client",
-		ResourceID:   resourceID,
-		OldValue:     oldV,
-		NewValue:     newV,
+		OrgID:         orgID,
+		ActorID:       actorID,
+		ActorEmail:    actorEmail,
+		Action:        action,
+		ResourceType:  "oauth2_client",
+		ResourceID:    resourceID,
+		OldValue:      oldV,
+		NewValue:      newV,
+		IPAddress:     dataStr(data, "ip_address"),
+		UserAgent:     dataStr(data, "user_agent"),
+		BranchID:      dataStr(data, "branch_id"),
+		BranchCode:    dataStr(data, "branch_code"),
+		SessionID:     dataStr(data, "session_id"),
+		CorrelationID: wfInstanceID,
 	})
 }
 
@@ -116,7 +127,7 @@ func (h *oauth2ClientWfHandler) handleWfCreate(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf create oauth2 client failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "create_client", client.ID.String(), nil, wfClientToJSON(client))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "create_client", client.ID.String(), nil, wfClientToJSON(client))
 	c.JSON(http.StatusOK, gin.H{"id": client.ID.String(), "success": true})
 }
 
@@ -159,7 +170,7 @@ func (h *oauth2ClientWfHandler) handleWfUpdate(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf update oauth2 client failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "update_client", id.String(), wfClientToJSON(oldClient), wfClientToJSON(client))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "update_client", id.String(), wfClientToJSON(oldClient), wfClientToJSON(client))
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -168,7 +179,7 @@ func (h *oauth2ClientWfHandler) handleWfDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	_, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -177,6 +188,6 @@ func (h *oauth2ClientWfHandler) handleWfDelete(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf delete oauth2 client failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "delete_client", id.String(), wfClientToJSON(oldClient), nil)
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "delete_client", id.String(), wfClientToJSON(oldClient), nil)
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
