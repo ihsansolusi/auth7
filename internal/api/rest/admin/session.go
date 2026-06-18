@@ -22,14 +22,18 @@ type AdminSessionService interface {
 
 // SessionListItem is the response shape for each active session.
 type SessionListItem struct {
-	SessionID  string `json:"session_id"`
-	UserID     string `json:"user_id"`
-	Username   string `json:"username,omitempty"`
-	OrgID      string `json:"org_id"`
-	IPAddress  string `json:"ip_address"`
-	UserAgent  string `json:"user_agent"`
-	CreatedAt  string `json:"created_at"`
-	ExpiresAt  string `json:"expires_at"`
+	SessionID      string `json:"session_id"`
+	UserID         string `json:"user_id"`
+	Username       string `json:"username,omitempty"`
+	OrgID          string `json:"org_id"`
+	IPAddress      string `json:"ip_address"`
+	UserAgent      string `json:"user_agent"`
+	DeviceInfo     string `json:"device_info"`
+	ActiveBranchID string `json:"active_branch_id"`
+	MFAVerified    bool   `json:"mfa_verified"`
+	CreatedAt      string `json:"created_at"`
+	LastUsedAt     string `json:"last_used_at"`
+	ExpiresAt      string `json:"expires_at"`
 }
 
 type SessionHandler struct {
@@ -140,13 +144,21 @@ func (h *SessionHandler) handleRevokeSession(c *gin.Context) {
 }
 
 func sessionToItem(s *session.SessionData) SessionListItem {
+	lastUsed := ""
+	if s.LastUsedAt > 0 {
+		lastUsed = time.Unix(s.LastUsedAt, 0).UTC().Format(time.RFC3339)
+	}
 	return SessionListItem{
-		SessionID: s.ID,
-		UserID:    s.UserID,
-		OrgID:     s.OrgID,
-		IPAddress: s.IPAddress,
-		UserAgent: s.UserAgent,
-		CreatedAt: time.Unix(s.CreatedAt, 0).UTC().Format(time.RFC3339),
-		ExpiresAt: time.Unix(s.ExpiresAt, 0).UTC().Format(time.RFC3339),
+		SessionID:      s.ID,
+		UserID:         s.UserID,
+		OrgID:          s.OrgID,
+		IPAddress:      s.IPAddress,
+		UserAgent:      s.UserAgent,
+		DeviceInfo:     s.DeviceInfo,
+		ActiveBranchID: s.ActiveBranchID,
+		MFAVerified:    s.MFAVerified,
+		CreatedAt:      time.Unix(s.CreatedAt, 0).UTC().Format(time.RFC3339),
+		LastUsedAt:     lastUsed,
+		ExpiresAt:      time.Unix(s.ExpiresAt, 0).UTC().Format(time.RFC3339),
 	}
 }
