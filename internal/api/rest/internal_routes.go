@@ -2,6 +2,7 @@ package rest
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	}
 
 	auditSvc := audit.NewService(audit.NewPGStore(store.Pool()))
+	auditSvc.SetForwarder(audit.NewAudit7Forwarder(os.Getenv("AUDIT7_URL"), os.Getenv("AUDIT7_SERVICE_KEY"), s.deps.Logger))
 
 	internalV1 := r.Group("/internal/v1")
 	internalV1.Use(m2mOnlyMW(jwtSvc))

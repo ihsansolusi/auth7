@@ -133,11 +133,18 @@ func (s *PGStore) List(ctx context.Context, filter domain.AuditLogFilter) ([]*do
 }
 
 type Service struct {
-	store Store
+	store     Store
+	forwarder *Audit7Forwarder
 }
 
 func NewService(store Store) *Service {
 	return &Service{store: store}
+}
+
+// SetForwarder enables forwarding of recorded audit logs to the central audit7
+// service. Passing nil (or never calling it) keeps forwarding disabled.
+func (s *Service) SetForwarder(f *Audit7Forwarder) {
+	s.forwarder = f
 }
 
 type LogInput struct {
@@ -176,6 +183,9 @@ func (s *Service) Log(ctx context.Context, input LogInput) error {
 	if err := s.store.Create(ctx, log); err != nil {
 		return fmt.Errorf("%s: %w", opLogAudit, err)
 	}
+
+	// Mirror to the central audit7 store (best-effort, fire-and-forget).
+	s.forwarder.forward(log)
 	return nil
 }
 
