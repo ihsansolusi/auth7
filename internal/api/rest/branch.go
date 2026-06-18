@@ -323,7 +323,7 @@ func (s *Server) handleSwitchBranch(c *gin.Context) {
 		BranchCode: assignment.BranchCode,
 	}
 
-	ipAddress := c.ClientIP()
+	ipAddress := clientIP(c)
 	userAgent := c.GetHeader("User-Agent")
 
 	result, err := sessionSvc.CreateSession(c.Request.Context(), userID, orgID, ipAddress, userAgent, newClaims)

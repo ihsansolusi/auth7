@@ -196,6 +196,22 @@ type LoginRequest struct {
 	MFACode  string `json:"mfa_code"`
 }
 
+// clientIP resolves the real client IP, preferring forwarded headers (set by
+// auth7-ui / nginx when proxying browser requests server-to-server) over the
+// direct connection IP (which would otherwise be the proxy's address).
+func clientIP(c *gin.Context) string {
+	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xr := strings.TrimSpace(c.GetHeader("X-Real-IP")); xr != "" {
+		return xr
+	}
+	return c.ClientIP()
+}
+
 func (h *AuthHandler) HandleLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -263,8 +279,13 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	ipAddress := c.ClientIP()
+	ipAddress := clientIP(c)
 	userAgent := c.GetHeader("User-Agent")
+
+	// Single active session per user: revoke prior sessions so a user doesn't
+	// accumulate many sessions across repeated logins. (Trade-off: logging in on
+	// a new device/browser ends the previous session.)
+	_ = h.sessionSvc.RevokeAllUserSessions(c.Request.Context(), user.ID.String())
 
 	roles, _ := h.store.UserRoleRepository.GetRoleCodesByUser(c.Request.Context(), user.ID)
 
