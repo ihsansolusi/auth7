@@ -53,6 +53,9 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 
 	// workflow7 service-task callbacks for the role lifecycle + permission assignment.
 	newRoleWfHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).registerRoutes(internalV1)
+
+	// workflow7 service-task callbacks for the OAuth2 client lifecycle.
+	newOAuth2ClientWfHandler(newAdminOAuth2ClientSvc(store), auditSvc, s.deps.Logger).registerRoutes(internalV1)
 }
 
 // audit7Settings resolves the central audit7 URL + service key, preferring the
