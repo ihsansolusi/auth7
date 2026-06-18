@@ -39,7 +39,8 @@ func NewAudit7Forwarder(baseURL, serviceKey string, logger zerolog.Logger) *Audi
 }
 
 // forward sends one audit log to audit7, fire-and-forget. Errors are logged.
-func (f *Audit7Forwarder) forward(log *domain.AuditLog) {
+// in carries context (branch/session/correlation) not persisted in audit_logs.
+func (f *Audit7Forwarder) forward(log *domain.AuditLog, in LogInput) {
 	if f == nil {
 		return
 	}
@@ -60,7 +61,7 @@ func (f *Audit7Forwarder) forward(log *domain.AuditLog) {
 		"resource":       map[string]any{"type": log.ResourceType, "id": log.ResourceID},
 		"result":         "SUCCESS",
 		"severity":       "INFO",
-		"channel":        "API",
+		"channel":        "BFF",
 		"source_app":     "auth7",
 		"module":         "access-management",
 	}
@@ -69,6 +70,18 @@ func (f *Audit7Forwarder) forward(log *domain.AuditLog) {
 	}
 	if log.UserAgent != "" {
 		event["user_agent"] = log.UserAgent
+	}
+	if in.BranchID != "" {
+		event["branch_id"] = in.BranchID
+	}
+	if in.BranchCode != "" {
+		event["branch_code"] = in.BranchCode
+	}
+	if in.SessionID != "" {
+		event["session_id"] = in.SessionID
+	}
+	if in.CorrelationID != "" {
+		event["correlation_id"] = in.CorrelationID
 	}
 	if len(log.OldValue) > 0 {
 		event["before_snapshot"] = log.OldValue

@@ -169,16 +169,22 @@ func (h *userWfHandler) bindEnvelope(c *gin.Context) (env wfEnvelope, orgID, act
 	return env, orgID, actorID, actorEmail, true
 }
 
-func (h *userWfHandler) audit(orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
+func (h *userWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
-		OrgID:        orgID,
-		ActorID:      actorID,
-		ActorEmail:   actorEmail,
-		Action:       action,
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		OldValue:     oldV,
-		NewValue:     newV,
+		OrgID:         orgID,
+		ActorID:       actorID,
+		ActorEmail:    actorEmail,
+		Action:        action,
+		ResourceType:  resourceType,
+		ResourceID:    resourceID,
+		OldValue:      oldV,
+		NewValue:      newV,
+		IPAddress:     dataStr(data, "ip_address"),
+		UserAgent:     dataStr(data, "user_agent"),
+		BranchID:      dataStr(data, "branch_id"),
+		BranchCode:    dataStr(data, "branch_code"),
+		SessionID:     dataStr(data, "session_id"),
+		CorrelationID: wfInstanceID,
 	})
 }
 
@@ -195,6 +201,47 @@ func uuidSliceStr(s []uuid.UUID) []string {
 	out := make([]string, 0, len(s))
 	for _, u := range s {
 		out = append(out, u.String())
+	}
+	return out
+}
+
+// idLabels loads an id->label map (label = code/branch_code, fallback name) for a
+// reference table, so audit before/after snapshots show human-readable codes.
+// The query must SELECT (id, code, name) filtered by org_id = $1.
+func (h *userWfHandler) idLabels(ctx context.Context, query string, orgID uuid.UUID) map[string]string {
+	m := map[string]string{}
+	rows, err := h.store.Pool().Query(ctx, query, orgID)
+	if err != nil {
+		return m
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var code, name string
+		if scanErr := rows.Scan(&id, &code, &name); scanErr != nil {
+			continue
+		}
+		label := code
+		if label == "" {
+			label = name
+		}
+		if label == "" {
+			label = id.String()
+		}
+		m[id.String()] = label
+	}
+	return m
+}
+
+// mapToLabels maps id strings through a label map, falling back to the id.
+func mapToLabels(ids []string, labels map[string]string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if l, ok := labels[id]; ok && l != "" {
+			out = append(out, l)
+		} else {
+			out = append(out, id)
+		}
 	}
 	return out
 }
@@ -285,7 +332,7 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 		}()
 	}
 
-	h.audit(orgID, actorID, actorEmail, "create_user", "user", user.ID.String(), nil, wfUserToJSON(user))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "create_user", "user", user.ID.String(), nil, wfUserToJSON(user))
 
 	resp := gin.H{"id": user.ID.String(), "success": true}
 	// Surface the generated password ONCE so the admin can relay it. Captured by
@@ -323,7 +370,7 @@ func (h *userWfHandler) handleWfUpdate(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf update user failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "update_user", "user", id.String(), wfUserToJSON(oldUser), wfUserToJSON(user))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "update_user", "user", id.String(), wfUserToJSON(oldUser), wfUserToJSON(user))
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -332,7 +379,7 @@ func (h *userWfHandler) handleWfDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	_, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
 	if !ok {
 		return
 	}
@@ -341,7 +388,7 @@ func (h *userWfHandler) handleWfDelete(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf delete user failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "delete_user", "user", id.String(), wfUserToJSON(oldUser), nil)
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "delete_user", "user", id.String(), wfUserToJSON(oldUser), nil)
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -362,7 +409,7 @@ func (h *userWfHandler) statusChange(c *gin.Context, action string, fn func(*gin
 	if !ok {
 		return
 	}
-	_, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
 	if !ok {
 		return
 	}
@@ -372,7 +419,7 @@ func (h *userWfHandler) statusChange(c *gin.Context, action string, fn func(*gin
 		return
 	}
 	newUser, _ := h.userSvc.GetUser(c.Request.Context(), id, orgID)
-	h.audit(orgID, actorID, actorEmail, action, "user", id.String(), wfUserToJSON(oldUser), wfUserToJSON(newUser))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, action, "user", id.String(), wfUserToJSON(oldUser), wfUserToJSON(newUser))
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -425,9 +472,10 @@ func (h *userWfHandler) handleWfSetRoles(c *gin.Context) {
 		}
 	}
 
-	h.audit(orgID, actorID, actorEmail, "set_roles", "user_role", userID.String(),
-		domain.JSON{"role_ids": uuidSetKeys(currentSet)},
-		domain.JSON{"role_ids": uuidSetKeys(desired)})
+	roleLabels := h.idLabels(c.Request.Context(), `SELECT id, code, name FROM roles WHERE org_id=$1`, orgID)
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "set_roles", "user_role", userID.String(),
+		domain.JSON{"roles": mapToLabels(uuidSetKeys(currentSet), roleLabels)},
+		domain.JSON{"roles": mapToLabels(uuidSetKeys(desired), roleLabels)})
 	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }
 
@@ -537,8 +585,12 @@ func (h *userWfHandler) handleWfSetBranches(c *gin.Context) {
 		return
 	}
 
-	h.audit(orgID, actorID, actorEmail, "set_branches", "user_branch", userID.String(),
-		domain.JSON{"branch_ids": uuidSliceStr(activeIDs)},
-		domain.JSON{"primary_branch_id": primaryStr, "branch_ids": uuidSetKeys(desired)})
+	branchLabels := h.idLabels(c.Request.Context(), `SELECT id, branch_code, name FROM branches WHERE org_id=$1`, orgID)
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "set_branches", "user_branch", userID.String(),
+		domain.JSON{"branches": mapToLabels(uuidSliceStr(activeIDs), branchLabels)},
+		domain.JSON{
+			"primary_branch": mapToLabels([]string{primaryStr}, branchLabels)[0],
+			"branches":       mapToLabels(uuidSetKeys(desired), branchLabels),
+		})
 	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }

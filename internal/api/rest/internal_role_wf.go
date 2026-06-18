@@ -53,17 +53,37 @@ func bindWfEnvelope(c *gin.Context) (env wfEnvelope, orgID, actorID uuid.UUID, a
 	return env, orgID, actorID, actorEmail, true
 }
 
-func (h *roleWfHandler) audit(orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
+func (h *roleWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
-		OrgID:        orgID,
-		ActorID:      actorID,
-		ActorEmail:   actorEmail,
-		Action:       action,
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		OldValue:     oldV,
-		NewValue:     newV,
+		OrgID:         orgID,
+		ActorID:       actorID,
+		ActorEmail:    actorEmail,
+		Action:        action,
+		ResourceType:  resourceType,
+		ResourceID:    resourceID,
+		OldValue:      oldV,
+		NewValue:      newV,
+		IPAddress:     dataStr(data, "ip_address"),
+		UserAgent:     dataStr(data, "user_agent"),
+		BranchID:      dataStr(data, "branch_id"),
+		BranchCode:    dataStr(data, "branch_code"),
+		SessionID:     dataStr(data, "session_id"),
+		CorrelationID: wfInstanceID,
 	})
+}
+
+// permLabel returns a human-readable permission label: code, else name, else id.
+func permLabel(p *domain.Permission) string {
+	if p == nil {
+		return ""
+	}
+	if p.Code != "" {
+		return p.Code
+	}
+	if p.Name != "" {
+		return p.Name
+	}
+	return p.ID.String()
 }
 
 func roleToJSON(r *domain.Role) domain.JSON {
@@ -114,7 +134,7 @@ func (h *roleWfHandler) handleWfCreate(c *gin.Context) {
 			return
 		}
 	}
-	h.audit(orgID, actorID, actorEmail, "create_role", "role", role.ID.String(), nil, roleToJSON(role))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "create_role", "role", role.ID.String(), nil, roleToJSON(role))
 	c.JSON(http.StatusOK, gin.H{"id": role.ID.String(), "success": true})
 }
 
@@ -137,7 +157,7 @@ func (h *roleWfHandler) handleWfUpdate(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf update role failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "update_role", "role", id.String(), roleToJSON(oldRole), roleToJSON(role))
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "update_role", "role", id.String(), roleToJSON(oldRole), roleToJSON(role))
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -146,7 +166,7 @@ func (h *roleWfHandler) handleWfDelete(c *gin.Context) {
 	if !ok {
 		return
 	}
-	_, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -155,7 +175,7 @@ func (h *roleWfHandler) handleWfDelete(c *gin.Context) {
 		wfFail(c, h.logger, err, "wf delete role failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "delete_role", "role", id.String(), roleToJSON(oldRole), nil)
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "delete_role", "role", id.String(), roleToJSON(oldRole), nil)
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
@@ -170,11 +190,11 @@ func (h *roleWfHandler) handleWfSetPermissions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// Capture current permissions (before) for the audit snapshot.
+	// Capture current permissions (before) as codes for the audit snapshot.
 	beforePerms := []string{}
 	if cur, gerr := h.roleSvc.GetPermissions(c.Request.Context(), id); gerr == nil {
 		for _, p := range cur {
-			beforePerms = append(beforePerms, p.ID.String())
+			beforePerms = append(beforePerms, permLabel(p))
 		}
 	}
 
@@ -184,12 +204,23 @@ func (h *roleWfHandler) handleWfSetPermissions(c *gin.Context) {
 		return
 	}
 
+	// Resolve desired permission ids -> codes via the full permission catalog.
+	permLabels := map[string]string{}
+	if all, lerr := h.roleSvc.ListPermissions(c.Request.Context()); lerr == nil {
+		for _, p := range all {
+			permLabels[p.ID.String()] = permLabel(p)
+		}
+	}
 	afterPerms := make([]string, 0, len(perms))
 	for _, p := range perms {
-		afterPerms = append(afterPerms, p.String())
+		if l, ok := permLabels[p.String()]; ok {
+			afterPerms = append(afterPerms, l)
+		} else {
+			afterPerms = append(afterPerms, p.String())
+		}
 	}
-	h.audit(orgID, actorID, actorEmail, "set_permissions", "role_permission", id.String(),
-		domain.JSON{"permission_ids": beforePerms},
-		domain.JSON{"permission_ids": afterPerms})
+	h.audit(env.Data, env.WfInstanceID, orgID, actorID, actorEmail, "set_permissions", "role_permission", id.String(),
+		domain.JSON{"permissions": beforePerms},
+		domain.JSON{"permissions": afterPerms})
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }

@@ -154,16 +154,20 @@ func (s *Service) SetForwarder(f *Audit7Forwarder) {
 }
 
 type LogInput struct {
-	OrgID        uuid.UUID
-	ActorID      uuid.UUID
-	ActorEmail   string
-	Action       string
-	ResourceType string
-	ResourceID   string
-	OldValue     domain.JSON
-	NewValue     domain.JSON
-	IPAddress    string
-	UserAgent    string
+	OrgID         uuid.UUID
+	ActorID       uuid.UUID
+	ActorEmail    string
+	Action        string
+	ResourceType  string
+	ResourceID    string
+	OldValue      domain.JSON
+	NewValue      domain.JSON
+	IPAddress     string
+	UserAgent     string
+	BranchID      string
+	BranchCode    string
+	SessionID     string
+	CorrelationID string
 }
 
 func (s *Service) Log(ctx context.Context, input LogInput) error {
@@ -203,7 +207,8 @@ func (s *Service) Log(ctx context.Context, input LogInput) error {
 	}
 
 	// Mirror to the central audit7 store (best-effort, fire-and-forget).
-	s.forwarder.forward(log)
+	// input carries context (branch/session/correlation) not stored locally.
+	s.forwarder.forward(log, input)
 	return nil
 }
 
