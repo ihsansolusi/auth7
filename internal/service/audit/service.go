@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
 )
 
 const opLogAudit = "audit.Service.Log"
@@ -135,16 +136,21 @@ func (s *PGStore) List(ctx context.Context, filter domain.AuditLogFilter) ([]*do
 type Service struct {
 	store     Store
 	forwarder *Audit7Forwarder
+	logger    zerolog.Logger
 }
 
 func NewService(store Store) *Service {
-	return &Service{store: store}
+	return &Service{store: store, logger: zerolog.Nop()}
 }
 
 // SetForwarder enables forwarding of recorded audit logs to the central audit7
-// service. Passing nil (or never calling it) keeps forwarding disabled.
+// service. Passing nil (or never calling it) keeps forwarding disabled. The
+// forwarder's logger is reused for surfacing async audit failures.
 func (s *Service) SetForwarder(f *Audit7Forwarder) {
 	s.forwarder = f
+	if f != nil {
+		s.logger = f.logger
+	}
 }
 
 type LogInput struct {
@@ -165,6 +171,18 @@ func (s *Service) Log(ctx context.Context, input LogInput) error {
 		return nil
 	}
 
+	// audit_logs.old_value / new_value are JSONB NOT NULL DEFAULT '{}'. Operations
+	// without a prior/after state (create, delete, set_roles, set_branches) pass
+	// nil — coerce to an empty object so the INSERT doesn't violate NOT NULL.
+	oldValue := input.OldValue
+	if oldValue == nil {
+		oldValue = domain.JSON{}
+	}
+	newValue := input.NewValue
+	if newValue == nil {
+		newValue = domain.JSON{}
+	}
+
 	log := &domain.AuditLog{
 		ID:           uuid.New(),
 		OrgID:        input.OrgID,
@@ -173,8 +191,8 @@ func (s *Service) Log(ctx context.Context, input LogInput) error {
 		Action:       input.Action,
 		ResourceType: input.ResourceType,
 		ResourceID:   input.ResourceID,
-		OldValue:     input.OldValue,
-		NewValue:     input.NewValue,
+		OldValue:     oldValue,
+		NewValue:     newValue,
 		IPAddress:    input.IPAddress,
 		UserAgent:    input.UserAgent,
 		CreatedAt:    time.Now(),
@@ -193,7 +211,11 @@ func (s *Service) LogAsync(input LogInput) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = s.Log(ctx, input)
+		if err := s.Log(ctx, input); err != nil {
+			// Audit is compliance-critical — never drop a failure silently.
+			s.logger.Error().Err(err).Str("action", input.Action).
+				Str("resource_id", input.ResourceID).Msg("async audit log failed")
+		}
 	}()
 }
 
