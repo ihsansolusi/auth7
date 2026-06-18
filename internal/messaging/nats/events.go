@@ -31,12 +31,15 @@ type TokenRefreshedEvent struct {
 }
 
 type SessionCreatedEvent struct {
-	SessionID string    `json:"session_id"`
-	OrgID     string    `json:"org_id"`
-	UserID    string    `json:"user_id"`
-	Username  string    `json:"username"`
-	IPAddress string    `json:"ip_address"`
-	CreatedAt time.Time `json:"created_at"`
+	SessionID  string    `json:"session_id"`
+	OrgID      string    `json:"org_id"`
+	UserID     string    `json:"user_id"`
+	Username   string    `json:"username"`
+	IPAddress  string    `json:"ip_address"`
+	UserAgent  string    `json:"user_agent,omitempty"`
+	BranchID   string    `json:"branch_id,omitempty"`
+	BranchCode string    `json:"branch_code,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type SessionTerminatedEvent struct {
@@ -46,6 +49,9 @@ type SessionTerminatedEvent struct {
 	Username     string    `json:"username"`
 	Reason       string    `json:"reason"`
 	IPAddress    string    `json:"ip_address"`
+	UserAgent    string    `json:"user_agent,omitempty"`
+	BranchID     string    `json:"branch_id,omitempty"`
+	BranchCode   string    `json:"branch_code,omitempty"`
 	TerminatedAt time.Time `json:"terminated_at"`
 }
 

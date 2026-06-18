@@ -329,12 +329,15 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 
 	if h.eventPub != nil {
 		_ = h.eventPub.PublishSessionCreated(c.Request.Context(), nats.SessionCreatedEvent{
-			SessionID: result.SessionID,
-			OrgID:     orgID.String(),
-			UserID:    user.ID.String(),
-			Username:  user.Username,
-			IPAddress: ipAddress,
-			CreatedAt: time.Now(),
+			SessionID:  result.SessionID,
+			OrgID:      orgID.String(),
+			UserID:     user.ID.String(),
+			Username:   user.Username,
+			IPAddress:  ipAddress,
+			UserAgent:  userAgent,
+			BranchID:   branchID,
+			BranchCode: branchCode,
+			CreatedAt:  time.Now(),
 		})
 	}
 }
@@ -384,6 +387,9 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 			Username:     claims.Username,
 			Reason:       "logout",
 			IPAddress:    c.ClientIP(),
+			UserAgent:    c.GetHeader("User-Agent"),
+			BranchID:     claims.BranchID,
+			BranchCode:   claims.BranchCode,
 			TerminatedAt: time.Now(),
 		})
 	}
