@@ -25,6 +25,10 @@ type SessionData struct {
 	ExpiresAt         int64    `json:"expires_at"`
 	LastUsedAt        int64    `json:"last_used_at"`
 	MFAVerified       bool     `json:"mfa_verified"`
+	// Source distinguishes a full SSO login session ("" / "login") from the
+	// minimal OAuth app-token session ("oauth") created during the
+	// authorization_code grant. Lets the admin UI hide the app sessions.
+	Source string `json:"source,omitempty"`
 }
 
 type Store struct {

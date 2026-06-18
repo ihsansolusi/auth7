@@ -31,6 +31,7 @@ type SessionListItem struct {
 	DeviceInfo     string `json:"device_info"`
 	ActiveBranchID string `json:"active_branch_id"`
 	MFAVerified    bool   `json:"mfa_verified"`
+	Source         string `json:"source"`
 	CreatedAt      string `json:"created_at"`
 	LastUsedAt     string `json:"last_used_at"`
 	ExpiresAt      string `json:"expires_at"`
@@ -157,6 +158,7 @@ func sessionToItem(s *session.SessionData) SessionListItem {
 		DeviceInfo:     s.DeviceInfo,
 		ActiveBranchID: s.ActiveBranchID,
 		MFAVerified:    s.MFAVerified,
+		Source:         s.Source,
 		CreatedAt:      time.Unix(s.CreatedAt, 0).UTC().Format(time.RFC3339),
 		LastUsedAt:     lastUsed,
 		ExpiresAt:      time.Unix(s.ExpiresAt, 0).UTC().Format(time.RFC3339),

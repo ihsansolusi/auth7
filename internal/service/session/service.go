@@ -262,6 +262,7 @@ func (s *Service) StoreSession(ctx context.Context, sessionID, userID, orgID str
 		ID:     sessionID,
 		UserID: userID,
 		OrgID:  orgID,
+		Source: "oauth", // minimal OAuth app-token session (hidden from admin list)
 	})
 }
 
