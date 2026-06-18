@@ -182,6 +182,23 @@ func (h *userWfHandler) audit(orgID, actorID uuid.UUID, actorEmail, action, reso
 	})
 }
 
+// uuidSetKeys / uuidSliceStr render id collections for audit before/after snapshots.
+func uuidSetKeys(m map[uuid.UUID]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k.String())
+	}
+	return out
+}
+
+func uuidSliceStr(s []uuid.UUID) []string {
+	out := make([]string, 0, len(s))
+	for _, u := range s {
+		out = append(out, u.String())
+	}
+	return out
+}
+
 func paramID(c *gin.Context) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -408,7 +425,9 @@ func (h *userWfHandler) handleWfSetRoles(c *gin.Context) {
 		}
 	}
 
-	h.audit(orgID, actorID, actorEmail, "set_roles", "user_role", userID.String(), nil, domain.JSON{"count": len(desired)})
+	h.audit(orgID, actorID, actorEmail, "set_roles", "user_role", userID.String(),
+		domain.JSON{"role_ids": uuidSetKeys(currentSet)},
+		domain.JSON{"role_ids": uuidSetKeys(desired)})
 	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }
 
@@ -518,9 +537,8 @@ func (h *userWfHandler) handleWfSetBranches(c *gin.Context) {
 		return
 	}
 
-	h.audit(orgID, actorID, actorEmail, "set_branches", "user_branch", userID.String(), nil, domain.JSON{
-		"primary_branch_id": primaryStr,
-		"count":             len(desired),
-	})
+	h.audit(orgID, actorID, actorEmail, "set_branches", "user_branch", userID.String(),
+		domain.JSON{"branch_ids": uuidSliceStr(activeIDs)},
+		domain.JSON{"primary_branch_id": primaryStr, "branch_ids": uuidSetKeys(desired)})
 	c.JSON(http.StatusOK, gin.H{"id": userID.String(), "success": true})
 }

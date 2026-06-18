@@ -170,11 +170,26 @@ func (h *roleWfHandler) handleWfSetPermissions(c *gin.Context) {
 	if !ok {
 		return
 	}
+	// Capture current permissions (before) for the audit snapshot.
+	beforePerms := []string{}
+	if cur, gerr := h.roleSvc.GetPermissions(c.Request.Context(), id); gerr == nil {
+		for _, p := range cur {
+			beforePerms = append(beforePerms, p.ID.String())
+		}
+	}
+
 	perms := permissionIDsFromData(env.Data)
 	if err := h.roleSvc.AssignPermissions(c.Request.Context(), id, perms); err != nil {
 		wfFail(c, h.logger, err, "wf set role permissions failed")
 		return
 	}
-	h.audit(orgID, actorID, actorEmail, "set_permissions", "role_permission", id.String(), nil, domain.JSON{"count": len(perms)})
+
+	afterPerms := make([]string, 0, len(perms))
+	for _, p := range perms {
+		afterPerms = append(afterPerms, p.String())
+	}
+	h.audit(orgID, actorID, actorEmail, "set_permissions", "role_permission", id.String(),
+		domain.JSON{"permission_ids": beforePerms},
+		domain.JSON{"permission_ids": afterPerms})
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
