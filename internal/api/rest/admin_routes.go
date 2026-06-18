@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -44,7 +43,8 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 	}
 
 	auditSvc := audit.NewService(audit.NewPGStore(store.Pool()))
-	auditSvc.SetForwarder(audit.NewAudit7Forwarder(os.Getenv("AUDIT7_URL"), os.Getenv("AUDIT7_SERVICE_KEY"), s.deps.Logger))
+	a7url, a7key := s.audit7Settings()
+	auditSvc.SetForwarder(audit.NewAudit7Forwarder(a7url, a7key, s.deps.Logger))
 
 	bearerMW := func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")

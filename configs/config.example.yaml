@@ -110,3 +110,7 @@ external:
   grpc:
     address: ""
     timeout: 10s
+
+audit7:
+  url: "${AUDIT7_URL}"
+  service_key: "${AUDIT7_SERVICE_KEY}"

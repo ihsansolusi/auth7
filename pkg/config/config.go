@@ -185,6 +185,14 @@ type Config struct {
 	NATS       NATSConfig       `mapstructure:"nats"`
 	External   ExternalConfig   `mapstructure:"external"`
 	SMTP       SMTPConfig       `mapstructure:"smtp"`
+	Audit7     Audit7Config     `mapstructure:"audit7"`
+}
+
+// Audit7Config configures forwarding of admin/workflow audit logs to the
+// central audit7 service. Empty URL disables forwarding.
+type Audit7Config struct {
+	URL        string `mapstructure:"url"`
+	ServiceKey string `mapstructure:"service_key"`
 }
 
 func Load(configPath string) (*Config, error) {
