@@ -43,19 +43,57 @@ type LoginResult struct {
 	OrgID        uuid.UUID
 }
 
+// deviceFromUA derives a friendly "Browser on OS" label from the User-Agent
+// for the session's device_info. Best-effort; empty UA → "".
+func deviceFromUA(ua string) string {
+	if ua == "" {
+		return ""
+	}
+	low := strings.ToLower(ua)
+	browser := "Unknown browser"
+	switch {
+	case strings.Contains(low, "edg/"):
+		browser = "Edge"
+	case strings.Contains(low, "opr/") || strings.Contains(low, "opera"):
+		browser = "Opera"
+	case strings.Contains(low, "chrome/") && !strings.Contains(low, "chromium"):
+		browser = "Chrome"
+	case strings.Contains(low, "firefox/"):
+		browser = "Firefox"
+	case strings.Contains(low, "safari/") && !strings.Contains(low, "chrome"):
+		browser = "Safari"
+	}
+	os := "Unknown OS"
+	switch {
+	case strings.Contains(low, "windows"):
+		os = "Windows"
+	case strings.Contains(low, "mac os") || strings.Contains(low, "macintosh"):
+		os = "macOS"
+	case strings.Contains(low, "android"):
+		os = "Android"
+	case strings.Contains(low, "iphone") || strings.Contains(low, "ipad"):
+		os = "iOS"
+	case strings.Contains(low, "linux"):
+		os = "Linux"
+	}
+	return browser + " on " + os
+}
+
 func (s *Service) CreateSession(ctx context.Context, userID, orgID uuid.UUID, ipAddress, userAgent string, claims jwt.Claims) (*LoginResult, error) {
 	const op = "session.Service.CreateSession"
 
 	sessionID := uuid.New().String()
 
 	sessionData := &SessionData{
-		ID:         sessionID,
-		UserID:     userID.String(),
-		OrgID:      orgID.String(),
-		IPAddress:  ipAddress,
-		UserAgent:  userAgent,
-		Roles:      claims.Roles,
-		MFAVerified: true,
+		ID:             sessionID,
+		UserID:         userID.String(),
+		OrgID:          orgID.String(),
+		ActiveBranchID: claims.BranchID,
+		IPAddress:      ipAddress,
+		UserAgent:      userAgent,
+		DeviceInfo:     deviceFromUA(userAgent),
+		Roles:          claims.Roles,
+		MFAVerified:    true,
 	}
 
 	if err := s.sessionStore.Create(ctx, sessionData); err != nil {
