@@ -19,6 +19,13 @@ func NewEventPublisher(publisher *Publisher, logger zerolog.Logger) *EventPublis
 	}
 }
 
+// PublishAudit durably publishes a pre-marshalled audit event to JetStream
+// (used by the audit forwarder to reach audit7's AUDIT7_EVENTS stream). msgID
+// sets Nats-Msg-Id for dedup. Returns an error if the persist ack fails.
+func (ep *EventPublisher) PublishAudit(subject string, data []byte, msgID string) error {
+	return ep.publisher.client.PublishStream(subject, data, msgID)
+}
+
 func (ep *EventPublisher) PublishTokenRevoked(ctx context.Context, event TokenRevokedEvent) error {
 	const op = "messaging.PublishTokenRevoked"
 	if err := ep.publisher.Publish(ctx, SubjectTokenRevoked, event); err != nil {

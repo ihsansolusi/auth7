@@ -2,7 +2,6 @@ package rest
 
 import (
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -32,8 +31,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	}
 
 	auditSvc := audit.NewService(audit.NewPGStore(store.Pool()))
-	a7url, a7key := s.audit7Settings()
-	auditSvc.SetForwarder(audit.NewAudit7Forwarder(a7url, a7key, s.deps.Logger))
+	auditSvc.SetForwarder(s.newAudit7Forwarder())
 
 	internalV1 := r.Group("/internal/v1")
 	internalV1.Use(m2mOnlyMW(jwtSvc))
@@ -61,22 +59,14 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	newBranchDefaultRolesWfHandler(store, auditSvc, s.deps.Logger).registerRoutes(internalV1)
 }
 
-// audit7Settings resolves the central audit7 URL + service key, preferring the
-// config file (always loaded) and falling back to env vars for env-driven
-// deployments. Empty URL disables forwarding.
-func (s *Server) audit7Settings() (string, string) {
-	url, key := "", ""
-	if s.deps.Config != nil {
-		url = s.deps.Config.Audit7.URL
-		key = s.deps.Config.Audit7.ServiceKey
+// newAudit7Forwarder builds the durable JetStream audit forwarder from the NATS
+// event publisher. Returns nil (forwarding disabled) when NATS is unavailable —
+// the local audit_logs write still happens regardless.
+func (s *Server) newAudit7Forwarder() *audit.Audit7Forwarder {
+	if s.deps.EventPub == nil {
+		return nil
 	}
-	if url == "" {
-		url = os.Getenv("AUDIT7_URL")
-	}
-	if key == "" {
-		key = os.Getenv("AUDIT7_SERVICE_KEY")
-	}
-	return url, key
+	return audit.NewAudit7Forwarder(s.deps.EventPub, s.deps.Logger)
 }
 
 // m2mOnlyMW verifies the Bearer token against auth7's own JWT service and

@@ -1,45 +1,47 @@
 package audit
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"net/http"
-	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
 	"github.com/rs/zerolog"
 )
 
-// Audit7Forwarder forwards admin/workflow audit entries to the central audit7
-// service (OJK audit store) as MODIFICATION events, in addition to auth7's own
-// audit_logs table. It authenticates via the X-Service-Key header (matching
-// audit7's SERVICE_KEY). A nil forwarder is a safe no-op.
-type Audit7Forwarder struct {
-	baseURL    string
-	serviceKey string
-	http       *http.Client
-	logger     zerolog.Logger
+// auditIngestSubject is the JetStream subject audit7 consumes durably for
+// forwarded MODIFICATION events (covered by the AUDIT7_EVENTS stream).
+const auditIngestSubject = "audit7.ingest.auth7"
+
+// AuditPublisher publishes a pre-marshalled audit event durably to JetStream
+// (implemented by nats.EventPublisher.PublishAudit). Decoupled via interface so
+// the audit package does not import the messaging package.
+type AuditPublisher interface {
+	PublishAudit(subject string, data []byte, msgID string) error
 }
 
-// NewAudit7Forwarder returns a forwarder, or nil when baseURL is empty or an
-// unexpanded "${VAR}" placeholder (audit7 forwarding disabled).
-func NewAudit7Forwarder(baseURL, serviceKey string, logger zerolog.Logger) *Audit7Forwarder {
-	if baseURL == "" || strings.HasPrefix(baseURL, "${") {
+// Audit7Forwarder forwards admin/workflow audit entries to the central audit7
+// service (OJK system of record) as MODIFICATION events, in addition to auth7's
+// own audit_logs table. Delivery is durable: it publishes to JetStream with a
+// persist-ack, so events survive audit7 downtime. A nil forwarder is a no-op.
+type Audit7Forwarder struct {
+	pub    AuditPublisher
+	logger zerolog.Logger
+}
+
+// NewAudit7Forwarder returns a forwarder, or nil when no publisher is available
+// (audit7 forwarding disabled).
+func NewAudit7Forwarder(pub AuditPublisher, logger zerolog.Logger) *Audit7Forwarder {
+	if pub == nil {
 		return nil
 	}
-	return &Audit7Forwarder{
-		baseURL:    baseURL,
-		serviceKey: serviceKey,
-		http:       &http.Client{Timeout: 5 * time.Second},
-		logger:     logger,
-	}
+	return &Audit7Forwarder{pub: pub, logger: logger}
 }
 
-// forward sends one audit log to audit7, fire-and-forget. Errors are logged.
+// forward publishes one audit log to audit7's JetStream ingest subject.
 // in carries context (branch/session/correlation) not persisted in audit_logs.
+// The publish is synchronous (persist-ack) but wrapped in a goroutine so it
+// never blocks the request; failures are logged (the local audit_logs row
+// remains the authoritative fallback).
 func (f *Audit7Forwarder) forward(log *domain.AuditLog, in LogInput) {
 	if f == nil {
 		return
@@ -51,8 +53,9 @@ func (f *Audit7Forwarder) forward(log *domain.AuditLog, in LogInput) {
 		display = actorID
 	}
 
+	eventID := uuid.NewString()
 	event := map[string]any{
-		"event_id":       uuid.NewString(),
+		"event_id":       eventID,
 		"occurred_at":    log.CreatedAt.UTC(),
 		"org_id":         log.OrgID.String(),
 		"actor":          map[string]any{"type": "user", "id": actorID, "display": display},
@@ -97,31 +100,8 @@ func (f *Audit7Forwarder) forward(log *domain.AuditLog, in LogInput) {
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.baseURL+"/v1/audit/events", bytes.NewReader(body))
-		if err != nil {
-			f.logger.Warn().Err(err).Msg("audit7 forward: new request failed")
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if f.serviceKey != "" {
-			req.Header.Set("X-Service-Key", f.serviceKey)
-		}
-
-		resp, err := f.http.Do(req)
-		if err != nil {
-			f.logger.Warn().Err(err).Str("action", log.Action).Msg("audit7 forward: request failed")
-			return
-		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		switch {
-		case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		case resp.StatusCode == http.StatusConflict: // duplicate event_id — already ingested
-		default:
-			f.logger.Warn().Int("status", resp.StatusCode).Str("action", log.Action).Msg("audit7 forward: non-2xx")
+		if err := f.pub.PublishAudit(auditIngestSubject, body, eventID); err != nil {
+			f.logger.Warn().Err(err).Str("action", log.Action).Msg("audit7 forward: jetstream publish failed (local audit_logs retains record)")
 		}
 	}()
 }

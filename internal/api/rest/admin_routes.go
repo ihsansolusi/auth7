@@ -43,8 +43,7 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 	}
 
 	auditSvc := audit.NewService(audit.NewPGStore(store.Pool()))
-	a7url, a7key := s.audit7Settings()
-	auditSvc.SetForwarder(audit.NewAudit7Forwarder(a7url, a7key, s.deps.Logger))
+	auditSvc.SetForwarder(s.newAudit7Forwarder())
 
 	bearerMW := func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
