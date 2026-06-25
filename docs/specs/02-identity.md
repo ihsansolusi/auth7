@@ -1,6 +1,6 @@
 # Auth7 — Spec 02: Identity
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 
@@ -517,6 +517,6 @@ Admin                   auth7-svc
 
 ---
 
-> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
+> Keputusan desain v1.0 dirangkum di [specs/README.md](./README.md); fitur yang belum diimplementasi ada di [ROADMAP.md](../ROADMAP.md).
 
 *Prev: [01-architecture.md](./01-architecture.md) | Next: [03-oauth2-oidc.md](./03-oauth2-oidc.md)*

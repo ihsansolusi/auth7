@@ -1,6 +1,6 @@
 # Auth7 — Spec 00: Overview & Vision
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 
@@ -244,7 +244,7 @@ Protected services memverifikasi token via:
 
 ## 8. Keputusan Desain (v1.0)
 
-Semua keputusan tercatat di [`../OPEN-QUESTIONS.md`](../OPEN-QUESTIONS.md). Ringkasan:
+Ringkasan keputusan v1.0 (index lengkap di [specs/README.md](./README.md)):
 
 | Keputusan | Value |
 |---|---|

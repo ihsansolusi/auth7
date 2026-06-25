@@ -1,6 +1,6 @@
 # Auth7 — Spec 09: Integration dengan Core7
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 
@@ -561,6 +561,6 @@ Features:
 
 ---
 
-> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
+> Keputusan desain v1.0 dirangkum di [specs/README.md](./README.md); fitur yang belum diimplementasi ada di [ROADMAP.md](../ROADMAP.md).
 
 *Prev: [08-data-model.md](./08-data-model.md) | Next: [10-security.md](./10-security.md)*

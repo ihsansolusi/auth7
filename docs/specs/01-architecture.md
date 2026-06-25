@@ -1,6 +1,6 @@
 # Auth7 — Spec 01: Architecture
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 

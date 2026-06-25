@@ -1,6 +1,6 @@
 # Auth7 — Spec 05: Session & Token Lifecycle
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 
@@ -612,6 +612,6 @@ Admin revoke token → Auth7
 
 ---
 
-> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
+> Keputusan desain v1.0 dirangkum di [specs/README.md](./README.md); fitur yang belum diimplementasi ada di [ROADMAP.md](../ROADMAP.md).
 
 *Prev: [04-authorization.md](./04-authorization.md) | Next: [06-mfa.md](./06-mfa.md)*

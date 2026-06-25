@@ -1,6 +1,6 @@
 # Auth7 — Spec 06: Multi-Factor Authentication
 
-> **Versi**: 1.0-draft | **Tanggal**: 2026-04-22 | **Fase**: Brainstorming
+> **Versi**: 1.0 | **Status**: ✅ Implemented (v1.0) — lihat `internal/`
 
 ---
 
@@ -540,6 +540,6 @@ func (d *Dispatcher) Send(ctx context.Context, e SecurityEvent) {
 
 ---
 
-> Semua open questions telah dijawab di [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
+> Keputusan desain v1.0 dirangkum di [specs/README.md](./README.md); fitur yang belum diimplementasi ada di [ROADMAP.md](../ROADMAP.md).
 
 *Prev: [05-session-token.md](./05-session-token.md) | Next: [07-admin-api.md](./07-admin-api.md)*
