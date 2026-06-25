@@ -19,19 +19,17 @@ Panduan lengkap untuk 4 proses migration di auth7.
 
 **Yang terjadi:**
 1. Semua file `migrations/*.sql` dihapus
-2. Generator membaca `appdefs/auth7/src/defappconfig/data_model.def`
-3. Dibuat 20 pasang file `up.sql` / `down.sql` baru
+2. Generator membaca `appdefs/auth7/data_model.def`
+3. Dibuat 20 pasang file `up.sql` / `down.sql` baru di `supported-apps/auth7/migrations/`
 
 ```bash
-cd supported-apps/auth7
-
-# Opsional: reset DB dulu (hapus semua tabel + data)
-make db-reset
-
-# Generate ulang file migration dari DEF
+# Generate file migration dari DEF (target ada di appdefs/auth7)
+cd appdefs/auth7
 make migrate-gen-reset
 
-# Apply ke database
+# Reset DB + apply migration (target ada di supported-apps/auth7)
+cd ../../supported-apps/auth7
+make db-reset      # opsional: hapus semua tabel + data
 make migrate-up
 ```
 
@@ -53,9 +51,10 @@ make migrate-up
 Tulis ALTER TABLE secara manual:
 
 ```bash
-cd supported-apps/auth7
+cd appdefs/auth7
 
 # Buat file migration baru kosong dengan nama yang deskriptif
+# (file dibuat di supported-apps/auth7/migrations/)
 make migrate-gen-add NAME=add_phone_to_users
 # Output:
 #   File dibuat:
@@ -87,15 +86,18 @@ make migrate-up
 Untuk tabel baru, gunakan generator tapi preview dulu ke `/tmp`:
 
 ```bash
-# Preview tabel baru ke /tmp
-python3 ../../scripts/deflang/gen_migrations.py \
-  --def ../../appdefs/auth7/src/defappconfig/data_model.def \
+# Preview tabel baru ke /tmp (dari appdefs/auth7)
+cd appdefs/auth7
+python3 ../scripts/gen_migrations.py \
+  --def data_model.def \
   --out /tmp/preview_new_table \
+  --module auth7 \
   --date $(date +%Y%m%d) \
   --start 21  # nomor setelah migration terakhir
 
-# Review hasilnya, lalu copy file yang relevan saja
-cp /tmp/preview_new_table/20260613000021_create_new_table.*.sql migrations/
+# Review hasilnya, lalu copy file yang relevan saja ke app repo
+cp /tmp/preview_new_table/20260613000021_create_new_table.*.sql \
+  ../../supported-apps/auth7/migrations/
 
 # Apply
 make migrate-up
@@ -237,7 +239,7 @@ Untuk Railway production:
 | File | Keterangan |
 |------|-----------|
 | `appdefs/auth7/src/defappconfig/data_model.def` | Source of truth schema |
-| `scripts/deflang/gen_migrations.py` | Generator DEF → SQL migration |
+| `appdefs/scripts/gen_migrations.py` | Generator DEF → SQL migration (dipanggil dari `appdefs/<modul>/Makefile`) |
 | `migrations/` | Schema DDL only (001-020, jangan edit yang lama) |
 | `migrations-seed/demo/` | Seed profile: org, cabang, user demo, oauth2 clients |
 | `migrations-seed/prod/` | Seed profile: org (setting prod) + oauth2 clients |

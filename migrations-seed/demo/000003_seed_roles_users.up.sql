@@ -17,17 +17,17 @@ INSERT INTO users (id, org_id, username, email, full_name, status, email_verifie
                    failed_login_attempts, preferred_locale)
 VALUES
     ('00000000-0000-0000-0001-000000000001', '00000000-0000-0000-0000-000000000001',
-     'admin',   'admin@bankdemo.local',   'Demo Admin',          'active', true, false, '', false, false, 0, 'id'),
+     'admin',   'admin@bankdemo.local',   'Andi Pratama',     'active', true, false, '', false, false, 0, 'id'),
     ('00000000-0000-0000-0001-000000000002', '00000000-0000-0000-0000-000000000001',
-     'bosdemo', 'bosdemo@bankdemo.local', 'Demo BOS',            'active', true, false, '', false, false, 0, 'id'),
+     'bosdemo', 'bosdemo@bankdemo.local', 'Bambang Sutrisno', 'active', true, false, '', false, false, 0, 'id'),
     ('00000000-0000-0000-0001-000000000003', '00000000-0000-0000-0000-000000000001',
-     'manager', 'manager@bankdemo.local', 'Demo Branch Manager', 'active', true, false, '', false, false, 0, 'id'),
+     'manager', 'manager@bankdemo.local', 'Citra Dewi',       'active', true, false, '', false, false, 0, 'id'),
     ('00000000-0000-0000-0001-000000000004', '00000000-0000-0000-0000-000000000001',
-     'spv',     'spv@bankdemo.local',     'Demo Supervisor',     'active', true, false, '', false, false, 0, 'id'),
+     'spv',     'spv@bankdemo.local',     'Dedi Kurniawan',   'active', true, false, '', false, false, 0, 'id'),
     ('00000000-0000-0000-0001-000000000005', '00000000-0000-0000-0000-000000000001',
-     'teller',  'teller@bankdemo.local',  'Demo Teller',         'active', true, false, '', false, false, 0, 'id'),
+     'teller',  'teller@bankdemo.local',  'Eka Putri',        'active', true, false, '', false, false, 0, 'id'),
     ('00000000-0000-0000-0001-000000000006', '00000000-0000-0000-0000-000000000001',
-     'auditor', 'auditor@bankdemo.local', 'Demo Auditor',        'active', true, false, '', false, false, 0, 'id')
+     'auditor', 'auditor@bankdemo.local', 'Fajar Nugraha',    'active', true, false, '', false, false, 0, 'id')
 ON CONFLICT (username) DO NOTHING;
 
 -- ─── Credentials (new schema: no version/is_current, UNIQUE per user+type) ───

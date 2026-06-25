@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     CONSTRAINT fk_audit_logs_org_id FOREIGN KEY (org_id) REFERENCES organizations(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id ON audit_logs(org_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_id ON audit_logs(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id ON audit_logs(org_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id_created_at
     ON audit_logs(org_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action
