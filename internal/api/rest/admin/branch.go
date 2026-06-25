@@ -116,7 +116,7 @@ func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {
 	branchTypes, err := h.branchSvc.ListBranchTypes(c.Request.Context(), orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("list branch types failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *BranchHandler) handleCreateBranchType(c *gin.Context) {
 	bt, err := h.branchSvc.CreateBranchType(c.Request.Context(), orgID, params)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("create branch type failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *BranchHandler) handleGetBranchType(c *gin.Context) {
 	bt, err := h.branchSvc.GetBranchType(c.Request.Context(), id, orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("get branch type failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *BranchHandler) handleUpdateBranchType(c *gin.Context) {
 	bt, err := h.branchSvc.UpdateBranchType(c.Request.Context(), id, orgID, params)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("update branch type failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -222,7 +222,7 @@ func (h *BranchHandler) handleDeleteBranchType(c *gin.Context) {
 
 	if err := h.branchSvc.DeleteBranchType(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Msg("delete branch type failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -242,7 +242,7 @@ func (h *BranchHandler) handleListBranches(c *gin.Context) {
 	branches, err := h.branchSvc.ListBranches(c.Request.Context(), orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("list branches failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (h *BranchHandler) handleCreateBranch(c *gin.Context) {
 	branch, err := h.branchSvc.CreateBranch(c.Request.Context(), orgID, params)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("create branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -287,7 +287,7 @@ func (h *BranchHandler) handleGetBranch(c *gin.Context) {
 	branch, err := h.branchSvc.GetBranch(c.Request.Context(), id, orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("get branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -314,7 +314,7 @@ func (h *BranchHandler) handleUpdateBranch(c *gin.Context) {
 	branch, err := h.branchSvc.UpdateBranch(c.Request.Context(), id, orgID, params)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("update branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (h *BranchHandler) handleDeleteBranch(c *gin.Context) {
 
 	if err := h.branchSvc.DeleteBranch(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Msg("delete branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -351,7 +351,7 @@ func (h *BranchHandler) handleGetUserBranches(c *gin.Context) {
 	assignments, err := h.branchSvc.GetUserBranches(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("get user branches failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -381,7 +381,7 @@ func (h *BranchHandler) handleAssignUserToBranch(c *gin.Context) {
 	assignment, err := h.branchSvc.AssignUserToBranch(c.Request.Context(), userID, params.BranchID, orgID, params)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("assign user to branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -401,7 +401,7 @@ func (h *BranchHandler) handleRevokeUserBranch(c *gin.Context) {
 
 	if err := h.branchSvc.RevokeUserBranch(c.Request.Context(), assignmentID, orgID, uuid.Nil); err != nil {
 		h.logger.Error().Err(err).Msg("revoke user branch failed")
-		c.JSON(500, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 

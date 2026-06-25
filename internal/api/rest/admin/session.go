@@ -72,7 +72,7 @@ func (h *SessionHandler) handleListSessions(c *gin.Context) {
 	all, err := h.sessionSvc.ListAllSessions(c.Request.Context())
 	if err != nil {
 		h.logger.Error().Err(err).Msg("list sessions failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *SessionHandler) handleRevokeSession(c *gin.Context) {
 	sess, err := h.sessionSvc.GetSession(c.Request.Context(), sessionID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("session_id", sessionID).Msg("get session failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 	if sess == nil {
@@ -121,7 +121,7 @@ func (h *SessionHandler) handleRevokeSession(c *gin.Context) {
 
 	if err := h.sessionSvc.RevokeSession(c.Request.Context(), sessionID); err != nil {
 		h.logger.Error().Err(err).Str("session_id", sessionID).Msg("revoke session failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 

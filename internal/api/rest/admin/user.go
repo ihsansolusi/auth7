@@ -91,7 +91,7 @@ func (h *UserHandler) handleListUsers(c *gin.Context) {
 	users, total, err := h.userSvc.ListUsers(c.Request.Context(), orgID, limit, offset, status)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("list users failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *UserHandler) handleCreateUser(c *gin.Context) {
 	user, err := h.userSvc.CreateUser(c.Request.Context(), orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("create user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *UserHandler) handleGetUser(c *gin.Context) {
 	user, err := h.userSvc.GetUser(c.Request.Context(), id, orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("get user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -191,7 +191,7 @@ func (h *UserHandler) handleUpdateUser(c *gin.Context) {
 	user, err := h.userSvc.UpdateUser(c.Request.Context(), id, orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("update user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -221,7 +221,7 @@ func (h *UserHandler) handleDeleteUser(c *gin.Context) {
 
 	if err := h.userSvc.DeleteUser(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("delete user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *UserHandler) handleLockUser(c *gin.Context) {
 
 	if err := h.userSvc.LockUser(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("lock user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *UserHandler) handleUnlockUser(c *gin.Context) {
 
 	if err := h.userSvc.UnlockUser(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("unlock user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -302,7 +302,7 @@ func (h *UserHandler) handleSuspendUser(c *gin.Context) {
 
 	if err := h.userSvc.SuspendUser(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Str("user", idStr).Msg("suspend user failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 

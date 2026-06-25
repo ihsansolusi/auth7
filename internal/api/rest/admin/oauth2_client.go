@@ -91,7 +91,7 @@ func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
 	clients, err := h.clientSvc.ListClients(c.Request.Context(), orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("list clients failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *OAuth2ClientHandler) handleCreateClient(c *gin.Context) {
 	client, err := h.clientSvc.CreateClient(c.Request.Context(), orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("create client failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *OAuth2ClientHandler) handleGetClient(c *gin.Context) {
 	client, err := h.clientSvc.GetClient(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error().Err(err).Str("client", idStr).Msg("get client failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *OAuth2ClientHandler) handleUpdateClient(c *gin.Context) {
 	client, err := h.clientSvc.UpdateClient(c.Request.Context(), id, orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("client", idStr).Msg("update client failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *OAuth2ClientHandler) handleDeleteClient(c *gin.Context) {
 
 	if err := h.clientSvc.DeleteClient(c.Request.Context(), id); err != nil {
 		h.logger.Error().Err(err).Str("client", idStr).Msg("delete client failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 

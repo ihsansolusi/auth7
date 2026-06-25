@@ -83,7 +83,7 @@ func (h *RoleHandler) handleListRoles(c *gin.Context) {
 	roles, err := h.roleSvc.ListRoles(c.Request.Context(), orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("list roles failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *RoleHandler) handleCreateRole(c *gin.Context) {
 	role, err := h.roleSvc.CreateRole(c.Request.Context(), orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("org", orgStr).Msg("create role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *RoleHandler) handleGetRole(c *gin.Context) {
 	role, err := h.roleSvc.GetRole(c.Request.Context(), id, orgID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("role", idStr).Msg("get role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *RoleHandler) handleUpdateRole(c *gin.Context) {
 	role, err := h.roleSvc.UpdateRole(c.Request.Context(), id, orgID, input)
 	if err != nil {
 		h.logger.Error().Err(err).Str("role", idStr).Msg("update role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *RoleHandler) handleDeleteRole(c *gin.Context) {
 
 	if err := h.roleSvc.DeleteRole(c.Request.Context(), id, orgID); err != nil {
 		h.logger.Error().Err(err).Str("role", idStr).Msg("delete role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -224,7 +224,7 @@ func (h *RoleHandler) handleGetRolePermissions(c *gin.Context) {
 	permissions, err := h.roleSvc.GetPermissions(c.Request.Context(), id)
 	if err != nil {
 		h.logger.Error().Err(err).Str("role", idStr).Msg("get role permissions failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -262,7 +262,7 @@ func (h *RoleHandler) handleAssignPermissions(c *gin.Context) {
 
 	if err := h.roleSvc.AssignPermissions(c.Request.Context(), id, permIDs); err != nil {
 		h.logger.Error().Err(err).Str("role", idStr).Msg("assign permissions failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *RoleHandler) handleListPermissions(c *gin.Context) {
 	permissions, err := h.roleSvc.ListPermissions(c.Request.Context())
 	if err != nil {
 		h.logger.Error().Err(err).Msg("list permissions failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 

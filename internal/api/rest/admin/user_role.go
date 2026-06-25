@@ -72,7 +72,7 @@ func (h *UserRoleHandler) handleAssignRole(c *gin.Context) {
 	assignment, err := h.userRoleSvc.AssignRole(c.Request.Context(), userID, roleID, orgID, branchID, grantedBy)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("assign role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *UserRoleHandler) handleRevokeRole(c *gin.Context) {
 
 	if err := h.userRoleSvc.RevokeRole(c.Request.Context(), userID, roleID, orgID, uuid.Nil); err != nil {
 		h.logger.Error().Err(err).Msg("revoke role failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (h *UserRoleHandler) handleGetUserRoles(c *gin.Context) {
 	roles, err := h.userRoleSvc.GetUserRoles(c.Request.Context(), userID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("get user roles failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *UserRoleHandler) handleGetBranchRoles(c *gin.Context) {
 	roles, err := h.userRoleSvc.GetBranchRoles(c.Request.Context(), branchID)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("get branch roles failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
+		respondError(c, err)
 		return
 	}
 
