@@ -70,8 +70,9 @@ Tidak boleh menjadi runtime authority IAM — semua keputusan allow/deny harus d
 
 ### 2.5 Keputusan: Facade vs Legacy (2026-06-26)
 
-> **PROPOSED — perlu ratifikasi lintas-stream** (mengamandemen lock W2 di `specs/07-admin-api.md §1.4`).
-> Proposal lengkap: [`core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`](../../../docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md).
+> ✅ **RATIFIED** (coordinator session, 2026-06-26) — mengamandemen lock W2 di `specs/07-admin-api.md §1.4`.
+> Proposal + log eksekusi: [`core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`](../../../docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md).
+> Sudah dieksekusi: `facade/access/*` dihapus (auth7), catch-all permissions bos7-enterprise di-repoint ke legacy, lock §1.4 diamandemen. `contracts/*`+`compatibility/*` disimpan dormant (menunggu S3 soal migrasi DAF).
 
 **Temuan:** dari 10 endpoint `/admin/v1/facade/*`, hanya `facade/access/permissions` yang dikonsumsi (oleh bos7-enterprise); 9 sisanya **nol konsumer** di seluruh devroot. Konsumer admin nyata = handler **legacy** `/admin/v1/*` (read) + `/internal/v1/*` wf-callbacks (write via workflow7).
 

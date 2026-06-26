@@ -52,9 +52,8 @@ func (h *FacadeHandler) RegisterRoutes(r *gin.RouterGroup) {
 		facade.GET("/contracts/readiness", h.handleContractReadiness)
 		facade.GET("/contracts/branch-projections", h.handleBranchProjectionSnapshot)
 		facade.GET("/contracts/employee-references/:user_id", h.handleEmployeeReferenceSnapshot)
-		facade.GET("/access/users", h.handleAccessUsers)
-		facade.GET("/access/roles", h.handleAccessRoles)
-		facade.GET("/access/permissions", h.handleAccessPermissions)
+		// access/* CRUD endpoints retired 2026-06-26 (Plan 13 facade-retirement):
+		// legacy /admin/v1/{users,roles,permissions} is the canonical contract.
 		facade.GET("/compatibility/role-menu-mappings", h.handleCompatibilityRoleMenuMappings)
 		facade.GET("/compatibility/function-permission-mappings", h.handleCompatibilityFunctionPermissionMappings)
 		facade.GET("/error-catalog", h.handleErrorCatalog)
@@ -162,60 +161,6 @@ func (h *FacadeHandler) handleEmployeeReferenceSnapshot(c *gin.Context) {
 		"attributes":  attrs,
 		"consumer_of": "core7-service-enterprise",
 	}, nil)
-}
-
-func (h *FacadeHandler) handleAccessUsers(c *gin.Context) {
-	orgID, ok := parseOrgID(c)
-	if !ok {
-		h.writeCatalogError(c, facadeErrorCatalog[0], nil)
-		return
-	}
-
-	users, total, err := h.store.UserRepository.ListByOrg(c.Request.Context(), orgID, 100, 0)
-	if err != nil {
-		h.writeMappedError(c, err)
-		return
-	}
-
-	h.writeSuccess(c, gin.H{
-		"items": users,
-	}, gin.H{
-		"total": total,
-	})
-}
-
-func (h *FacadeHandler) handleAccessRoles(c *gin.Context) {
-	orgID, ok := parseOrgID(c)
-	if !ok {
-		h.writeCatalogError(c, facadeErrorCatalog[0], nil)
-		return
-	}
-
-	roles, err := h.store.RoleRepository.ListByOrg(c.Request.Context(), orgID)
-	if err != nil {
-		h.writeMappedError(c, err)
-		return
-	}
-
-	h.writeSuccess(c, gin.H{
-		"items": roles,
-	}, gin.H{
-		"count": len(roles),
-	})
-}
-
-func (h *FacadeHandler) handleAccessPermissions(c *gin.Context) {
-	perms, err := h.store.PermissionRepository.List(c.Request.Context())
-	if err != nil {
-		h.writeMappedError(c, err)
-		return
-	}
-
-	h.writeSuccess(c, gin.H{
-		"items": perms,
-	}, gin.H{
-		"count": len(perms),
-	})
 }
 
 func (h *FacadeHandler) handleErrorCatalog(c *gin.Context) {
