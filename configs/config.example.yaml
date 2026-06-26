@@ -114,3 +114,17 @@ external:
 audit7:
   url: "${AUDIT7_URL}"
   service_key: "${AUDIT7_SERVICE_KEY}"
+
+# policy7: time-based ABAC. auth7 consumes the operational_hours parameter from
+# policy7 and denies the listed permissions outside the operating window.
+policy7:
+  enabled: ${POLICY7_ENABLED:-false}
+  api_url: ${POLICY7_API_URL:-http://localhost:8090}
+  service_id: "${POLICY7_SERVICE_ID}"
+  api_key: "${POLICY7_API_KEY}"
+  param_name: ${POLICY7_OPERATIONAL_HOURS_PARAM:-teller_operating_hours}
+  default_timezone: ${POLICY7_DEFAULT_TIMEZONE:-Asia/Jakarta}
+  fail_open: ${POLICY7_FAIL_OPEN:-true}
+  time_gated_permissions:
+    - transaction:create
+    - transaction:approve

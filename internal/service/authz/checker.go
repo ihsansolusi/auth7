@@ -12,6 +12,11 @@ type PermissionChecker struct {
 	enforcer  Enforcer
 	abac      *ABACEvaluator
 	roleStore RoleStore
+
+	// timeWindow enforces time-based access (operational_hours). Nil disables it.
+	timeWindow *TimeWindowEvaluator
+	// timeGated is the set of permissions denied outside operational hours.
+	timeGated map[string]bool
 }
 
 func NewPermissionChecker(
@@ -24,6 +29,25 @@ func NewPermissionChecker(
 		abac:      abac,
 		roleStore: roleStore,
 	}
+}
+
+// WithTimeGate enables time-based ABAC: the given permissions are denied when
+// the current time is outside the operational window resolved via tw. Returns
+// the receiver for chaining. Passing a nil tw or empty permissions leaves the
+// time-gate disabled.
+func (c *PermissionChecker) WithTimeGate(tw *TimeWindowEvaluator, permissions []string) *PermissionChecker {
+	c.timeWindow = tw
+	c.timeGated = make(map[string]bool, len(permissions))
+	for _, p := range permissions {
+		c.timeGated[p] = true
+	}
+	return c
+}
+
+// isTimeGated reports whether the permission must pass the operational-hours
+// check.
+func (c *PermissionChecker) isTimeGated(permission string) bool {
+	return c.timeWindow != nil && c.timeGated[permission]
 }
 
 func (c *PermissionChecker) CheckPermission(ctx context.Context, authCtx *domain.AuthContext, permission string) (*domain.AuthorizationResult, error) {
@@ -58,6 +82,18 @@ func (c *PermissionChecker) CheckDataAccess(ctx context.Context, authCtx *domain
 	result, err := c.CheckPermission(ctx, authCtx, permission)
 	if err != nil || !result.Allowed {
 		return result, err
+	}
+
+	// Time-based ABAC: deny time-gated actions outside operational hours before
+	// any further (resource-level) ABAC evaluation.
+	if c.isTimeGated(permission) {
+		twResult, err := c.timeWindow.Evaluate(ctx, authCtx)
+		if err != nil {
+			return nil, fmt.Errorf("time-window evaluate: %w", err)
+		}
+		if !twResult.Allowed {
+			return twResult, nil
+		}
 	}
 
 	if c.needsABACCheck(permission) {

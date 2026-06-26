@@ -28,8 +28,12 @@ func (h *PolicyUpdateHandler) HandleParamUpdated(data []byte) error {
 		return fmt.Errorf("%s: unmarshal event: %w", op, err)
 	}
 
-	cacheKey := fmt.Sprintf("opa:%s:%s", event.OrgID, event.ParameterName)
-	h.cache.Invalidate(cacheKey)
+	// Prefix-invalidate so scope-suffixed keys are cleared too: the fetch-through
+	// consumers key by "opa:<org>:<param>:<scope>" (e.g.
+	// "opa:<org>:operational_hours:<branch>"), so an exact "opa:<org>:<param>"
+	// delete would miss them. The prefix covers both the bare and scoped forms.
+	prefix := fmt.Sprintf("opa:%s:%s", event.OrgID, event.ParameterName)
+	h.cache.InvalidateByPrefix(prefix)
 
 	h.logger.Info().
 		Str("op", op).

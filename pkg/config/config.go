@@ -186,6 +186,53 @@ type Config struct {
 	External   ExternalConfig   `mapstructure:"external"`
 	SMTP       SMTPConfig       `mapstructure:"smtp"`
 	Audit7     Audit7Config     `mapstructure:"audit7"`
+	Policy7    Policy7Config    `mapstructure:"policy7"`
+}
+
+// Policy7Config configures consumption of policy7 parameters as ABAC context.
+// Currently used for time-based access control (operational_hours). Secrets
+// (service_id, api_key) must be supplied via env (${POLICY7_*}); never inline.
+type Policy7Config struct {
+	// Enabled turns on time-based ABAC enforcement. When false the time-gate is
+	// skipped entirely (no policy7 calls, all actions time-allowed).
+	Enabled bool `mapstructure:"enabled"`
+	// APIURL is the policy7 base URL, e.g. http://policy7:8080.
+	APIURL string `mapstructure:"api_url"`
+	// ServiceID / APIKey are the M2M credentials policy7 expects on
+	// X-Service-ID / X-API-Key.
+	ServiceID string `mapstructure:"service_id"`
+	APIKey    string `mapstructure:"api_key"`
+	// ParamName is the operational_hours parameter name to fetch (effective
+	// resolution applies user->role->branch->global inside policy7). Defaults to
+	// "teller_operating_hours" — the aggregate weekly-schedule shape.
+	ParamName string `mapstructure:"param_name"`
+	// DefaultTimezone is used when the parameter value carries no timezone.
+	// Accepts IANA names (Asia/Jakarta) or Indonesian abbreviations (WIB/WITA/WIT).
+	DefaultTimezone string `mapstructure:"default_timezone"`
+	// TimeGatedPermissions lists the permissions denied outside operational hours.
+	// Config-driven so the set is tuned without code changes.
+	TimeGatedPermissions []string `mapstructure:"time_gated_permissions"`
+	// FailOpen controls behaviour when policy7 is unreachable or the parameter is
+	// missing/unparseable: true => allow (availability-first, default), false =>
+	// deny (strict). A loud warning is logged either way.
+	FailOpen bool `mapstructure:"fail_open"`
+}
+
+// ParamNameOrDefault returns the configured operational_hours param name or the
+// default aggregate weekly-schedule param.
+func (c Policy7Config) ParamNameOrDefault() string {
+	if c.ParamName != "" {
+		return c.ParamName
+	}
+	return "teller_operating_hours"
+}
+
+// DefaultTimezoneOrFallback returns the configured default timezone or WIB.
+func (c Policy7Config) DefaultTimezoneOrFallback() string {
+	if c.DefaultTimezone != "" {
+		return c.DefaultTimezone
+	}
+	return "Asia/Jakarta"
 }
 
 // Audit7Config configures forwarding of admin/workflow audit logs to the

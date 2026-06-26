@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ihsansolusi/auth7/internal/api/middleware"
 	"github.com/ihsansolusi/auth7/internal/messaging/nats"
+	"github.com/ihsansolusi/auth7/internal/service/authz"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
 	"github.com/ihsansolusi/auth7/pkg/config"
 	"github.com/ihsansolusi/lib7-service-go/logging"
@@ -16,24 +17,31 @@ import (
 )
 
 type ServerDeps struct {
-	Service      any
-	DB           any
-	Store        any
-	Logger       zerolog.Logger
-	Tracer       trace.Tracer
-	Metrics      *metrics.Registry
-	AuditLogger  *logging.AuditLogger
-	TokenMaker   token.Maker
-	JWTSvc       any
-	SessionSvc   any
-	Config       *config.Config
-	RedisClient  any
-	EventPub     *nats.EventPublisher
+	Service     any
+	DB          any
+	Store       any
+	Logger      zerolog.Logger
+	Tracer      trace.Tracer
+	Metrics     *metrics.Registry
+	AuditLogger *logging.AuditLogger
+	TokenMaker  token.Maker
+	JWTSvc      any
+	SessionSvc  any
+	Config      *config.Config
+	RedisClient any
+	EventPub    *nats.EventPublisher
 	// OAuth2 services
 	OAuth2TokenSvc    *oauth2svc.TokenService
 	OAuth2ClientSvc   *oauth2svc.ClientService
 	OAuth2AuthCodeSvc *oauth2svc.AuthorizationCodeService
 	OIDCSvc           *oauth2svc.OIDCService
+
+	// TimeWindow is the time-based ABAC evaluator (operational_hours). Nil when
+	// policy7 time-gating is disabled. Wire into a PermissionChecker via
+	// checker.WithTimeGate(deps.TimeWindow, deps.TimeGatedPermissions).
+	TimeWindow *authz.TimeWindowEvaluator
+	// TimeGatedPermissions lists the permissions denied outside operational hours.
+	TimeGatedPermissions []string
 }
 
 type Server struct {
@@ -98,7 +106,9 @@ func (s *Server) handleJWKS(c *gin.Context) {
 	}
 
 	var keys []map[string]interface{}
-	if jwtSvc, ok := s.deps.JWTSvc.(interface{ GetJWKS() []map[string]interface{} }); ok {
+	if jwtSvc, ok := s.deps.JWTSvc.(interface {
+		GetJWKS() []map[string]interface{}
+	}); ok {
 		keys = jwtSvc.GetJWKS()
 	}
 
