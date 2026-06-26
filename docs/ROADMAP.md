@@ -31,9 +31,9 @@ Diturunkan dari "Out of Scope v1.0" di [`specs/00-overview.md`](./specs/00-overv
 
 | Item | Butuh kontrak dari | Kondisi sekarang |
 |---|---|---|
-| Runtime adapter/scheduler/sync worker untuk **branch projection** | `core7-service-enterprise` (S3) — field projection final (`org_id, code, name, status, parent, type`) | Masih via `scripts/sync-branches-from-enterprise.sh` (manual/script), belum runtime |
-| Runtime sync **employee reference** (employee_id, department, position, branch_code) sebagai attribute (bukan master) | `core7-service-enterprise` (S3) — kontrak employee reference | Belum ada |
-| Cache/event consumer **policy7** parameter context untuk ABAC input | `policy7` — kontrak parameter (tanpa memindahkan policy truth ke auth7) | Belum ada |
+| Runtime **branch projection** sync | `core7-service-enterprise` (S3) — endpoint `/v1/source-contracts/branches` final & stabil | **Sebagian SUDAH ADA**: `internal/service/branchsync/poller.go` HTTP poller (M2M, 5-min, upsert 5 kolom) ter-wire di `cmd/server/start.go`, tapi **dorman** (aktif hanya bila `ENTERPRISE_SOURCE_URL`+`ENTERPRISE_CLIENT_ID` di-set). Script manual = fallback. Belum: NATS push, drift/delete handling, hierarchy/type |
+| Runtime sync **employee reference** (employee_id, department, position, branch_code) sebagai attribute (bukan master) | `core7-service-enterprise` (S3) — kontrak employee reference | Belum ada (tidak dimodelkan di auth7) |
+| Cache/event consumer **policy7** parameter context untuk ABAC input | `policy7` — kontrak parameter (tanpa memindahkan policy truth ke auth7) | Belum ada (OPA `opacache` ada, tapi belum ada consumer parameter policy7) |
 
 **Boundary (tetap):** auth7 = owner IAM; branch di auth7 = **projeksi** (bukan master); employee = **reference/attribute** (bukan master); policy = milik policy7, dikonsumsi sebagai input ABAC.
 
