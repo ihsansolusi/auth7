@@ -68,7 +68,6 @@ func (s *Server) RegisterAdminV1Routes(r *gin.Engine) {
 
 	adminpkg.NewUserHandler(newAdminUserSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewRoleHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
-	adminpkg.NewFacadeHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewUserRoleHandler(newAdminUserRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewAuditHandler(auditSvc, s.deps.Logger).RegisterRoutes(adminV1)
 	adminpkg.NewOAuth2ClientHandler(newAdminOAuth2ClientSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(adminV1)

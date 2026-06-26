@@ -53,11 +53,11 @@ sesuai kebutuhan authorization runtime; admin CRUD policy tetap di backend `poli
 
 > **AMENDED 2026-06-26 (coordinator ratification — Plan 13 facade retirement).**
 > Kontrak Access Management kanonik adalah **handler legacy `/admin/v1/*`** (read langsung,
-> write via `workflow7` → `/internal/v1/*` wf-callbacks). Endpoint **`/admin/v1/facade/access/*`
-> ditarik** (redundan dengan legacy, nol konsumer) — `bos7-enterprise` membaca langsung dari
-> legacy. `facade/contracts/*` + `facade/compatibility/*` **dipertahankan dormant** sebagai
-> tooling migrasi DAF→core7 (deprecation-marked, akan di-sunset setelah migrasi data legacy
-> selesai). Rasional + keputusan: `core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`.
+> write via `workflow7` → `/internal/v1/*` wf-callbacks). **Seluruh `/admin/v1/facade/*` DIHAPUS**
+> (handler `internal/api/rest/admin/facade.go` dihapus): `access/*` redundan dengan legacy, dan
+> `contracts/*` + `compatibility/*` adalah tooling migrasi DAF→core7 IAM yang **dikonfirmasi tidak
+> dipakai lagi** (2026-06-26). Rasional + keputusan:
+> `core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`.
 
 Semua capability Access Management yang dikonsumsi `bos7-enterprise` tetap dimiliki backend
 `auth7`, tanpa ambiguity owner.
@@ -68,8 +68,7 @@ Semua capability Access Management yang dikonsumsi `bos7-enterprise` tetap dimil
 | Role & permission management | `GET/POST /admin/v1/roles`, `PUT/DELETE /admin/v1/roles/:id`, `GET /admin/v1/permissions`, `POST /admin/v1/roles/:id/permissions` | `auth7` | `auth7` |
 | Branch assignment (access scope) | `PUT /admin/v1/users/:id/branch-assignments`, `GET/POST /admin/v1/users/:id/branches`, `DELETE /admin/v1/users/:user_id/branches/:assignment_id` | `auth7` | `auth7` (projection + assignment) |
 | Session admin visibility/revocation | `GET /admin/v1/sessions`, `DELETE /admin/v1/sessions/:id`, `DELETE /admin/v1/users/:id/sessions` | `auth7` | `auth7` |
-| Migration tooling (dormant, deprecation-marked) | `GET /admin/v1/facade/contracts/*`, `GET /admin/v1/facade/compatibility/*` | `auth7` | `auth7` |
-| ~~Facade access reads~~ | ~~`GET /admin/v1/facade/access/*`~~ — **RETIRED 2026-06-26** | — | — |
+| ~~Facade (`access/*`, `contracts/*`, `compatibility/*`)~~ | ~~`/admin/v1/facade/*`~~ — **RETIRED 2026-06-26** (facade.go dihapus) | — | — |
 
 Guardrail eksplisit:
 - Tidak ada approval UI/API/facade untuk Access Management di `bos7-enterprise`.
