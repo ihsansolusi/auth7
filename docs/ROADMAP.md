@@ -24,14 +24,15 @@ Diturunkan dari "Out of Scope v1.0" di [`specs/00-overview.md`](./specs/00-overv
 
 ---
 
-## 2. Plan 13 — Enterprise Boundary: Residual Lintas-Modul
+## 2. Plan 13 — Enterprise Boundary: ✅ Ditutup di sisi auth7 (2026-06-26)
 
-Konformansi internal auth7 sudah **PASS** (audit W5, 2026-05-12), tetapi **cutover lintas-modul** belum selesai.
-Rekomendasi kesiapan cutover terakhir: **`NOT READY`**.
-
-> Boundary sudah dikunci: auth7 = owner IAM (identity/credential/session/role/permission/authz);
+> Boundary dikunci: auth7 = owner IAM (identity/credential/session/role/permission/authz);
 > `core7-service-enterprise` = owner branch/employee master; `policy7` = owner policy/parameter; `bos7-enterprise` = admin UI utama.
-> Residual di bawah adalah pekerjaan **implementasi & wiring**, **bukan** perubahan boundary.
+
+Konformansi internal auth7 **PASS** (audit W5). Seluruh residual sisi auth7 sudah **selesai** pada coordinator session 2026-06-26:
+harmonisasi error (§2.1), parity scoping (§2.1), keputusan facade→legacy + facade dihapus (§2.5).
+Semua blocker W5 closed/moot (§2.4). Tidak ada lagi pekerjaan Plan 13 yang menggantung di auth7 —
+yang tersisa hanya **integrasi runtime branch/employee/policy7** (§3), sebuah wave baru yang butuh kontrak dari modul lain.
 
 ### 2.1 Harmonization (auth7-side)
 
@@ -39,50 +40,42 @@ Rekomendasi kesiapan cutover terakhir: **`NOT READY`**.
 - ✅ **Payload envelope** — DITUTUP dengan keputusan: envelope legacy (`{users}`/`{roles}`/`{branches}`/…) **diresmikan sebagai kontrak kanonik**, BUKAN dimigrasi ke bentuk facade `{success,data,meta}`. Lihat [§2.5](#25-keputusan-facade-vs-legacy-2026-06-26).
 - ✅ **Parity enforcement org/branch/role scoping** — DONE (2026-06-26). Audit + fix: (F1) `GET /admin/v1/sessions` kini di-scope ke org pemanggil (sebelumnya bocor lintas-org); (F2/F4) shared `requireOrgID` menjadikan klaim JWT sebagai sumber org otoritatif + 400 konsisten untuk org invalid, diretrofit ke seluruh handler admin; (F3) middleware menolak token tanpa org-binding kecuali `super_admin`. Regular admin tidak bisa lintas-org (403 di middleware); super_admin tetap `*:*`. Tertutup unit test (`requireOrgID`, session scoping, middleware empty-org/mismatch).
 
-### 2.2 Compatibility artifacts (target retire/sunset)
+### 2.2 Compatibility artifacts — ✅ RETIRED (2026-06-26)
 
-Tidak boleh menjadi runtime authority IAM — semua keputusan allow/deny harus dari role/permission auth7.
+S3 mengonfirmasi migrasi data legacy DAF IAM (`peran`/`listperanuser`/`rolemenulist`/`usermenulist`/function-map)
+**tidak dipakai lagi**. Karena itu seluruh tooling jembatan migrasi (`facade/compatibility/*` + `facade/contracts/*`)
+**dihapus** bersama facade. Steady-state IAM auth7 (`roles`/`user_roles`/`menu:{key}:access`/`{resource}:{action}`)
+sudah jadi satu-satunya runtime authority; guard `isLegacySemanticPath` di bos7-enterprise tetap memblokir path legacy.
 
-| Artifact | Status | Target steady-state |
-|---|---|---|
-| `legacy_user_id` mapping | facade | user lifecycle penuh via auth7 users + audit lineage |
-| `enterprise.peran` | compatibility-only | auth7 `roles` sebagai satu-satunya runtime authority |
-| `enterprise.listperanuser` | compatibility-only | auth7 `user_roles` scoped org/branch |
-| `enterprise.rolemenulist` | compatibility-only | permission `menu:{menu_key}:access` |
-| `enterprise.usermenulist` | retire-target | role-based menu + exception policy eksplisit |
-| legacy function/action map | compatibility-only | permission `{resource}:{action}` |
+### 2.3 Cutover — ✅ Selesai (read/write split menggantikan facade)
 
-### 2.3 Cutover conditions (harus terpenuhi semua)
+Kondisi cutover lama berbasis facade sudah tidak berlaku. Steady-state final:
+1. Read Access Management di `bos7-enterprise` → langsung ke legacy `/admin/v1/*` (read-only). ✅
+2. Write → `workflow7` → M2M `/internal/v1/*` wf-callbacks; tidak ada write langsung ke `/admin/v1`. ✅
+3. Tidak ada write path ke artifact legacy sebagai authority runtime. ✅
+4. Audit event admin (wf-callback) membawa `correlation_id` = wf instance id. ✅
 
-1. Semua operasi Access Management di `bos7-enterprise` baca/tulis ke `/admin/v1/facade/*` auth7.
-2. Tidak ada write path aktif ke artifact legacy role/menu/function sebagai authority runtime.
-3. Parity minimum role-menu-permission translation tercapai (test matrix disepakati lintas stream).
-4. Setiap audit event admin dari facade punya `correlation_id` untuk trace lintas modul.
+### 2.4 Blockers W5 — ✅ Semua closed/moot
 
-### 2.4 Blockers (owner di luar auth7 — butuh koordinator devroot)
+| Blocker | Outcome |
+|---|---|
+| `W5-S1-B01` (wiring facade S5) | ✅ **gugur** — tidak ada migrasi ke facade |
+| `W5-S1-B02` (freeze mapping S3) | ✅ **moot** — migrasi legacy role/menu/function tidak dijalankan |
+| `W5-S1-B03` (parity matrix) | parity *migrasi* **moot**; parity *scoping enforcement* **DONE** (§2.1) |
+| `W5-S1-B04` (sunset facade) | ✅ **done** — seluruh `/admin/v1/facade/*` dihapus |
 
-| Blocker | Owner | Deskripsi |
-|---|---|---|
-| `W5-S1-B01` | `bos7-enterprise` (S5) | facade IAM path belum fully wired/verified ke endpoint auth7 |
-| `W5-S1-B02` | `core7-service-enterprise` (S3) | freeze final mapping role/menu/function source belum dinyatakan selesai |
-| `W5-S1-B03` | S5 + coordinator | parity test matrix legacy → permission auth7 belum disepakati |
-| `W5-S1-B04` | coordinator (`core7-devroot`) | tanggal sunset compatibility endpoints + rollback rule belum ditetapkan |
+### 2.5 Keputusan: Facade → Legacy (2026-06-26) — ✅ RATIFIED + EXECUTED
 
-### 2.5 Keputusan: Facade vs Legacy (2026-06-26)
-
-> ✅ **RATIFIED + DONE** (coordinator session, 2026-06-26) — mengamandemen lock W2 di `specs/07-admin-api.md §1.4`.
+> Mengamandemen lock W2 di `specs/07-admin-api.md §1.4`.
 > Proposal + log eksekusi: [`core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`](../../../docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md).
-> **Seluruh `facade/*` dihapus** (`internal/api/rest/admin/facade.go` deleted) — `access/*` redundan + `contracts/*`/`compatibility/*` (tooling migrasi DAF) dikonfirmasi tidak dipakai lagi. Catch-all permissions bos7-enterprise sudah di-repoint ke legacy; lock §1.4 diamandemen.
 
-**Temuan:** dari 10 endpoint `/admin/v1/facade/*`, hanya `facade/access/permissions` yang dikonsumsi (oleh bos7-enterprise); 9 sisanya **nol konsumer** di seluruh devroot. Konsumer admin nyata = handler **legacy** `/admin/v1/*` (read) + `/internal/v1/*` wf-callbacks (write via workflow7).
+**Temuan:** dari 10 endpoint `/admin/v1/facade/*`, hanya 1 yang pernah dikonsumsi (shadowed pula); konsumer admin nyata = handler legacy `/admin/v1/*` (read) + `/internal/v1/*` wf-callbacks (write).
 
-**Keputusan yang diusulkan:**
-- **TIDAK migrasi CRUD read ke facade (A2 dibatalkan).** auth7 & bos7-enterprise satu tim/satu devroot → ROI anti-corruption layer rendah; pain kontrak sudah ditutup A1 (§2.1).
-- **Legacy `/admin/v1/*` = kontrak Access Management kanonik.** Ini mengubah cutover condition §2.3 #1 (yang semula menuntut baca/tulis via facade).
-- **`facade/access/*` (duplikat CRUD) dipensiunkan**; repoint 1 pemakaian `facade/access/permissions` → `/admin/v1/permissions`.
-- **`facade/compatibility/*` + `facade/contracts/*`** (jembatan migrasi enterprise + snapshot boundary) — nasibnya diputuskan bersama S3 + coordinator (terkait blocker B02): simpan bila migrasi legacy enterprise masih live, retire bila sudah selesai.
-
-**Konsekuensi ke blocker:** kalau diratifikasi, B01 (wiring facade) dan B04 (sunset facade) **gugur/berubah bentuk** — bukan lagi "selesaikan migrasi ke facade" melainkan "resmikan legacy + pensiunkan facade".
+**Yang dieksekusi:**
+- **A2 (migrasi CRUD ke facade) dibatalkan** — ROI anti-corruption layer rendah (satu tim/devroot); pain kontrak sudah ditutup A1 (§2.1).
+- **Legacy `/admin/v1/*` = kontrak Access Management kanonik**, dan dibuat **read-only** (write endpoint yang tak dipakai dihapus; writes via workflow7 → `/internal/v1`).
+- **Seluruh `facade/*` dihapus** (`access/*` redundan + `contracts/*`/`compatibility/*` migrasi-mati); `facade/access/permissions` bos7-enterprise di-repoint ke legacy.
+- **wf-callbacks dipindah ke subpackage `internal/api/rest/wfcallback/`** untuk memisahkan write-path M2M dari read-API user-JWT.
 
 ---
 
@@ -90,11 +83,13 @@ Tidak boleh menjadi runtime authority IAM — semua keputusan allow/deny harus d
 
 ---
 
-## 3. Integrasi runtime branch/employee (turunan Plan 13, belum diimplementasi)
+## 3. Integrasi runtime branch/employee/policy7 (turunan Plan 13, belum diimplementasi)
 
-Berada di "Out of Scope" Plan 13 — perlu wave implementasi tersendiri:
+Berada di "Out of Scope" Plan 13 — **satu-satunya pekerjaan auth7 yang tersisa**, perlu wave tersendiri
+dan kontrak dari modul lain (bukan murni in-repo):
 
-- Runtime adapter/scheduler/sync worker untuk **branch projection** dari `core7-service-enterprise` → auth7 (kontrak field final).
-- Runtime sync untuk **employee reference** (employee_id, department, position, branch_code) sebagai attribute, bukan master.
-- Cache/event consumer untuk **policy7** parameter context (ABAC input) tanpa memindahkan policy truth ke auth7.
-- Migrasi data legacy live untuk translasi role/menu/function.
+- Runtime adapter/scheduler/sync worker untuk **branch projection** dari `core7-service-enterprise` → auth7 (butuh kontrak field final dari S3). Saat ini sinkronisasi masih via `scripts/sync-branches-from-enterprise.sh` (manual/script), belum runtime.
+- Runtime sync untuk **employee reference** (employee_id, department, position, branch_code) sebagai attribute, bukan master (butuh kontrak employee dari S3).
+- Cache/event consumer untuk **policy7** parameter context (ABAC input) tanpa memindahkan policy truth ke auth7 (butuh kontrak parameter dari policy7).
+
+> Migrasi data legacy DAF role/menu/function **tidak lagi relevan** (dikonfirmasi tidak dipakai, 2026-06-26).
