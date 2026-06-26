@@ -26,14 +26,23 @@ Diturunkan dari "Out of Scope v1.0" di [`specs/00-overview.md`](./specs/00-overv
 
 ## 2. Integrasi runtime branch / employee / policy7 (wave "S3")
 
-> **Satu-satunya pekerjaan auth7 yang tersisa.** Turunan Plan 13 yang sengaja ditaruh di luar scope.
-> **Bukan murni in-repo** — setiap item butuh kontrak final dari modul lain, jadi perlu brainstorm/koordinasi lintas-stream dulu.
+> Turunan Plan 13 (out-of-scope). Sebagian besar sudah dikerjakan di Wave S3 (umbrella `core7-devroot#601`).
+> Detail + status per-issue: [`core7-devroot/docs/plans/integration/PLAN-S3-AUTH7-ABAC-CONTROL.md`](../../../docs/plans/integration/PLAN-S3-AUTH7-ABAC-CONTROL.md).
+
+**Status S3 (per 2026-06-27):**
+- ✅ **S3.1** branch projection sync — poller enable + delete/tombstone (#157).
+- ✅ **S3.2** time-based ABAC — konsumsi policy7 `operational_hours` (cache + NATS fetch-through), wired ke checker (#158).
+- ✅ **S3.3** auth7 jadi **PDP**: REST `/internal/v1/authz/*` (#163) + gRPC `auth.v1.AuthCheckService` (lib7 auth7grpc contract, #167) berbagi satu decision core.
+- 🟡 **S3.3d / #609** PEP — workflow7 `Auth7RBAC` di-wire ke auth7 gRPC (`AUTH7_GRPC_ADDR`). **Wiring done; live e2e PENDING** (butuh stack jalan) → prompt: [`PLAN-S3-E2E-609.md`](../../../docs/plans/integration/PLAN-S3-E2E-609.md).
+- ⏸️ **S3.3b/c** Casbin enforcer (#164) + ABAC policy store (#165) — **deferred** (belum ada konsumer hidup).
+
+**Sisa yang belum dikerjakan (butuh kontrak modul lain):**
 
 | Item | Butuh kontrak dari | Kondisi sekarang |
 |---|---|---|
 | Runtime **branch projection** sync | `core7-service-enterprise` (S3) — endpoint `/v1/source-contracts/branches` final & stabil | **SUDAH ADA (S3.1, #157)**: `internal/service/branchsync/poller.go` HTTP poller (M2M, 5-min, upsert 5 kolom) ter-wire di `cmd/server/start.go`. Enable via env (`ENTERPRISE_SOURCE_URL`+`ENTERPRISE_CLIENT_ID`, lihat `.env.example` + spec 09 §4.5.4). **Delete/tombstone handling**: pass sukses-penuh men-deactivate branch yang absen dari source, dengan guard partial-fetch + empty-set. Belum: NATS push, hierarchy/type (out of scope projection) |
 | Runtime sync **employee reference** (employee_id, department, position, branch_code) sebagai attribute (bukan master) | `core7-service-enterprise` (S3) — kontrak employee reference | Belum ada (tidak dimodelkan di auth7) |
-| Cache/event consumer **policy7** parameter context untuk ABAC input | `policy7` — kontrak parameter (tanpa memindahkan policy truth ke auth7) | Belum ada (OPA `opacache` ada, tapi belum ada consumer parameter policy7) |
+| Cache/event consumer **policy7** parameter context untuk ABAC input | `policy7` — kontrak parameter (tanpa memindahkan policy truth ke auth7) | **operational_hours SUDAH (S3.2)** via `opacache` fetch-through + NATS invalidate. Parameter lain (product_access, dll) menyusul saat fitur butuh |
 
 **Boundary (tetap):** auth7 = owner IAM; branch di auth7 = **projeksi** (bukan master); employee = **reference/attribute** (bukan master); policy = milik policy7, dikonsumsi sebagai input ABAC.
 
