@@ -152,11 +152,20 @@ type contractEnvelope struct {
 
 // tick performs one full fetch + upsert cycle, paginating until all pages
 // are read.  Returns the first error encountered or nil if successful.
+//
+// auth7.branches is a projection, NOT master data — the enterprise domain
+// owns the lifecycle.  So a full, error-free pass also tombstones (sets
+// is_active=false) any branch that no longer appears in the source.  The
+// deactivation runs ONLY after every page fetched OK: if any page errors we
+// return early and leave existing rows untouched, so a transient enterprise
+// outage can never wipe the projection.
 func (p *Poller) tick(ctx context.Context) error {
 	const op = "branchsync.Poller.tick"
 
 	page := 1
 	totalApplied := 0
+	// seen accumulates every branch ID returned across all pages of this pass.
+	seen := make(map[uuid.UUID]struct{})
 
 	for {
 		env, err := p.fetchPage(ctx, page)
@@ -166,7 +175,7 @@ func (p *Poller) tick(ctx context.Context) error {
 		if len(env.Data) == 0 {
 			break
 		}
-		applied, err := p.upsertBatch(ctx, env.Data)
+		applied, err := p.upsertBatch(ctx, env.Data, seen)
 		if err != nil {
 			return fmt.Errorf("%s upsert page=%d: %w", op, page, err)
 		}
@@ -177,8 +186,16 @@ func (p *Poller) tick(ctx context.Context) error {
 		page++
 	}
 
+	// Full pass succeeded (no early return above) — reconcile deletions.
+	deactivated, err := p.deactivateAbsent(ctx, seen)
+	if err != nil {
+		return fmt.Errorf("%s deactivate: %w", op, err)
+	}
+
 	p.logger.Info().Str("op", op).
 		Int("applied", totalApplied).
+		Int("seen", len(seen)).
+		Int("deactivated", deactivated).
 		Msg("branch sync complete")
 	return nil
 }
@@ -219,8 +236,10 @@ func (p *Poller) fetchPage(ctx context.Context, page int) (*contractEnvelope, er
 
 // upsertBatch performs the UPSERT for the items in a single page using a tx.
 // Only the 5 projection columns are stored — branch hierarchy and type live
-// in the enterprise domain.
-func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) (int, error) {
+// in the enterprise domain.  Every successfully-parsed branch ID (regardless
+// of its active status) is recorded in seen so the caller can tombstone the
+// branches that the source no longer reports.
+func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem, seen map[uuid.UUID]struct{}) (int, error) {
 	const op = "branchsync.Poller.upsertBatch"
 
 	tx, err := p.pool.Begin(ctx)
@@ -236,6 +255,9 @@ func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) 
 			p.logger.Warn().Str("branch_id", item.BranchID).Err(err).Msg("skip — invalid uuid")
 			continue
 		}
+		seen[id] = struct{}{}
+		// Honor is_active=false from the source — a branch reported as
+		// non-active is deactivated here, not merely skipped.
 		isActive := strings.EqualFold(item.Status, "active")
 
 		_, err = tx.Exec(ctx, `
@@ -258,6 +280,48 @@ func (p *Poller) upsertBatch(ctx context.Context, items []branchProjectionItem) 
 		return applied, fmt.Errorf("%s commit: %w", op, err)
 	}
 	return applied, nil
+}
+
+// deactivateAbsent tombstones every still-active branch for this tenant that
+// the source did not report in the completed pass.  MUST be called only after
+// a fully successful fetch (see tick) — running it on a partial pass would
+// deactivate branches that merely live on an unfetched page.
+//
+// Guard: an empty seen set is treated as a no-op.  A successful pass that
+// returns zero branches almost always means a misconfigured source or an
+// upstream that briefly served an empty list — not "every branch was deleted".
+// Refusing to deactivate on empty avoids wiping the whole projection.
+func (p *Poller) deactivateAbsent(ctx context.Context, seen map[uuid.UUID]struct{}) (int, error) {
+	const op = "branchsync.Poller.deactivateAbsent"
+
+	if len(seen) == 0 {
+		p.logger.Warn().Str("op", op).
+			Msg("source returned zero branches — skipping deactivation to avoid wiping the projection")
+		return 0, nil
+	}
+
+	// Pass IDs as text[] and cast to uuid[] — robust under pgx's default type
+	// map without a registered uuid array codec.
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id.String())
+	}
+
+	tag, err := p.pool.Exec(ctx, `
+		UPDATE branches
+		SET is_active = false, updated_at = NOW()
+		WHERE org_id = $1 AND is_active = true AND id <> ALL($2::uuid[])
+	`, p.cfg.OrgID, ids)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	n := int(tag.RowsAffected())
+	if n > 0 {
+		p.logger.Info().Str("op", op).Int("deactivated", n).
+			Msg("tombstoned branches absent from source")
+	}
+	return n, nil
 }
 
 // getM2MToken fetches a short-lived bearer token from auth7 using the

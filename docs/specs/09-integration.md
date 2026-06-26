@@ -416,6 +416,39 @@ Agar wiring runtime bisa dimulai di Wave 3, auth7 membutuhkan finalisasi dari st
 - definisi final schema contract employee reference dari `core7-service-enterprise`
 - konfirmasi caller context policy input yang dipakai auth7 dari `policy7`
 
+### 4.5.4 Branch Sync Poller — Enable & Operations (Wave S3.1)
+
+Runtime consumer dari kontrak 4.5.1 adalah `internal/service/branchsync/poller.go`, di-wire di
+`cmd/server/start.go`. Poller melakukan HTTP pull (M2M `client_credentials`) ke
+`GET /v1/source-contracts/branches`, paginasi semua halaman, lalu upsert 5 kolom projection
+(`id`, `org_id`, `branch_code`, `is_active`, `updated_at`) ke `auth7.branches`.
+
+**Enable** — poller dorman secara default; aktif hanya bila **kedua** `ENTERPRISE_SOURCE_URL`
+dan `ENTERPRISE_CLIENT_ID` di-set. Env vars (semua secret via env, jangan di config file):
+
+| Env var | Contoh / default | Keterangan |
+|---|---|---|
+| `ENTERPRISE_SOURCE_URL` | `http://core7-service-enterprise:8090/v1/source-contracts/branches` | Endpoint source contract. Kosong → poller mati. |
+| `ENTERPRISE_CLIENT_ID` | `branchsync` | Client M2M terdaftar di auth7. Kosong → poller mati. |
+| `ENTERPRISE_CLIENT_SECRET` | *(secret)* | Secret untuk grant `client_credentials`. |
+| `AUTH7_TOKEN_URL` | `http://localhost:4445/oauth2/token` | Token endpoint auth7. |
+| `ENTERPRISE_TENANT_ORG_ID` | `00000000-0000-0000-0000-000000000001` | Tenant marker → `branches.org_id` + header `X-Actor-Org-Id`. |
+| `ENTERPRISE_POLL_INTERVAL` | `5m` | Interval poll (Go duration). |
+
+**Delete / tombstone semantics** — `auth7.branches` adalah **projection**, bukan master;
+lifecycle dimiliki enterprise. Maka:
+- Setiap pass yang **sukses penuh** (semua halaman ter-fetch tanpa error) mengumpulkan set
+  semua branch ID dari source, lalu men-deactivate (`is_active=false`) branch yang **tidak lagi**
+  dilaporkan source untuk tenant tsb.
+- **Guard partial fetch**: jika ada satu halaman gagal, `tick()` return early — tidak ada
+  deactivation. Sehingga outage enterprise sementara tidak pernah menghapus projection.
+- **Guard empty set**: pass sukses yang melaporkan 0 branch diperlakukan no-op (bukan "semua
+  branch dihapus") untuk mencegah projection ter-wipe akibat misconfiguration.
+- `is_active=false` dari source juga dihormati (branch di-deactivate, bukan sekadar di-skip).
+
+Hierarchy/type (`parent_enterprise_branch_id`, `branch_type_code`) **di luar scope** poller saat
+ini — tetap di domain enterprise.
+
 ### 4.6 service7-template
 
 ```
