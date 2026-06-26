@@ -119,7 +119,7 @@ audit7:
 # policy7 and denies the listed permissions outside the operating window.
 policy7:
   enabled: ${POLICY7_ENABLED:-false}
-  api_url: ${POLICY7_API_URL:-http://localhost:8090}
+  api_url: ${POLICY7_API_URL:-http://localhost:8085}
   service_id: "${POLICY7_SERVICE_ID}"
   api_key: "${POLICY7_API_KEY}"
   param_name: ${POLICY7_OPERATIONAL_HOURS_PARAM:-teller_operating_hours}
