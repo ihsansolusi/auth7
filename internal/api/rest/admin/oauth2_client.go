@@ -2,7 +2,6 @@ package admin
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -11,14 +10,16 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// OAuth2ClientService is the read surface for the admin HTTP API. Mutations flow
+// through workflow7 → the M2M /internal/v1 wf-callbacks; the concrete adapter
+// still implements create/update/delete for those callbacks.
 type OAuth2ClientService interface {
 	ListClients(ctx interface{}, orgID uuid.UUID) ([]*domain.Client, error)
 	GetClient(ctx interface{}, id uuid.UUID) (*domain.Client, error)
-	CreateClient(ctx interface{}, orgID uuid.UUID, input CreateClientInput) (*domain.Client, error)
-	UpdateClient(ctx interface{}, id uuid.UUID, orgID uuid.UUID, input UpdateClientInput) (*domain.Client, error)
-	DeleteClient(ctx interface{}, id uuid.UUID) error
 }
 
+// CreateClientInput / UpdateClientInput are the lifecycle inputs consumed by the
+// wf-callback handlers; kept here as the shared contract.
 type CreateClientInput struct {
 	ClientID                string
 	Name                    string
@@ -36,16 +37,16 @@ type CreateClientInput struct {
 }
 
 type UpdateClientInput struct {
-	Name                    *string
-	Description             *string
-	AllowedScopes           *[]string
-	AllowedRedirectURIs     *[]string
-	AllowedOrigins          *[]string
-	TokenExpiration         *int
-	RefreshTokenExpiration  *int
-	AllowMultipleTokens     *bool
-	SkipConsentScreen       *bool
-	IsActive                *bool
+	Name                   *string
+	Description            *string
+	AllowedScopes          *[]string
+	AllowedRedirectURIs    *[]string
+	AllowedOrigins         *[]string
+	TokenExpiration        *int
+	RefreshTokenExpiration *int
+	AllowMultipleTokens    *bool
+	SkipConsentScreen      *bool
+	IsActive               *bool
 }
 
 type OAuth2ClientHandler struct {
@@ -66,10 +67,7 @@ func (h *OAuth2ClientHandler) RegisterRoutes(r *gin.RouterGroup) {
 	clients := r.Group("/oauth2/clients")
 	{
 		clients.GET("", h.handleListClients)
-		clients.POST("", h.handleCreateClient)
 		clients.GET("/:id", h.handleGetClient)
-		clients.PUT("/:id", h.handleUpdateClient)
-		clients.DELETE("/:id", h.handleDeleteClient)
 	}
 }
 
@@ -89,30 +87,6 @@ func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"clients": clients})
 }
 
-func (h *OAuth2ClientHandler) handleCreateClient(c *gin.Context) {
-	orgID, ok := requireOrgID(c)
-	if !ok {
-		return
-	}
-
-	var input CreateClientInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
-	}
-
-	client, err := h.clientSvc.CreateClient(c.Request.Context(), orgID, input)
-	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("create client failed")
-		respondError(c, err)
-		return
-	}
-
-	h.logAction(orgID, c, "create_client", "oauth2_client", client.ID.String(), nil, clientToJSON(client))
-
-	c.JSON(http.StatusCreated, client)
-}
-
 func (h *OAuth2ClientHandler) handleGetClient(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
@@ -129,92 +103,4 @@ func (h *OAuth2ClientHandler) handleGetClient(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, client)
-}
-
-func (h *OAuth2ClientHandler) handleUpdateClient(c *gin.Context) {
-	orgID, ok := requireOrgID(c)
-	if !ok {
-		return
-	}
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid client id"})
-		return
-	}
-
-	oldClient, _ := h.clientSvc.GetClient(c.Request.Context(), id)
-
-	var input UpdateClientInput
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
-		return
-	}
-
-	client, err := h.clientSvc.UpdateClient(c.Request.Context(), id, orgID, input)
-	if err != nil {
-		h.logger.Error().Err(err).Str("client", idStr).Msg("update client failed")
-		respondError(c, err)
-		return
-	}
-
-	h.logAction(orgID, c, "update_client", "oauth2_client", idStr, clientToJSON(oldClient), clientToJSON(client))
-
-	c.JSON(http.StatusOK, client)
-}
-
-func (h *OAuth2ClientHandler) handleDeleteClient(c *gin.Context) {
-	orgID, ok := requireOrgID(c)
-	if !ok {
-		return
-	}
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid client id"})
-		return
-	}
-
-	oldClient, _ := h.clientSvc.GetClient(c.Request.Context(), id)
-
-	if err := h.clientSvc.DeleteClient(c.Request.Context(), id); err != nil {
-		h.logger.Error().Err(err).Str("client", idStr).Msg("delete client failed")
-		respondError(c, err)
-		return
-	}
-
-	h.logAction(orgID, c, "delete_client", "oauth2_client", idStr, clientToJSON(oldClient), nil)
-
-	c.JSON(http.StatusOK, gin.H{"deactivated": true})
-}
-
-func (h *OAuth2ClientHandler) logAction(orgID uuid.UUID, c *gin.Context, action, resourceType, resourceID string, oldVal, newVal domain.JSON) {
-	actorID, actorEmail := getActorFromContext(c)
-	h.auditSvc.LogAsync(audit.LogInput{
-		OrgID:        orgID,
-		ActorID:      actorID,
-		ActorEmail:   actorEmail,
-		Action:       action,
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		OldValue:     oldVal,
-		NewValue:     newVal,
-		IPAddress:    c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-	})
-}
-
-func clientToJSON(c *domain.Client) domain.JSON {
-	if c == nil {
-		return nil
-	}
-	return domain.JSON{
-		"id":                       c.ID.String(),
-		"client_id":                c.ID.String(),
-		"name":                     c.Name,
-		"client_type":              string(c.ClientType),
-		"token_endpoint_auth_method": string(c.TokenEndpointAuthMethod),
-		"is_active":                c.IsActive,
-		"created_at":               c.CreatedAt.Format(time.RFC3339),
-	}
 }

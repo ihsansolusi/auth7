@@ -62,12 +62,20 @@ sesuai kebutuhan authorization runtime; admin CRUD policy tetap di backend `poli
 Semua capability Access Management yang dikonsumsi `bos7-enterprise` tetap dimiliki backend
 `auth7`, tanpa ambiguity owner.
 
-| Capability | Endpoint(s) — kanonik | API Owner | Data Owner |
+> **AMENDED 2026-06-26 (read/write split).** `/admin/v1/*` sekarang **read-only** (list/get).
+> Mutasi (create/update/delete/lock/unlock/suspend, assign role/branch/permission, client
+> lifecycle) **tidak lagi diekspos** di `/admin/v1/*` — semuanya lewat `workflow7` → M2M
+> **`/internal/v1/*` wf-callbacks** (`wf-create`/`wf-update`/`wf-delete`/`wf-set-*`), karena itu
+> jalur yang sebenarnya dipakai (approval-gated). Pengecualian: **session revocation** tetap
+> direct (`DELETE /admin/v1/sessions/:id`) — aksi keamanan tanpa padanan workflow.
+
+| Capability | Read (`/admin/v1`, user-JWT) | Write (`/internal/v1`, M2M via workflow7) | Owner |
 |---|---|---|---|
-| User lifecycle (list/create/update/lock/unlock/suspend/delete) | `GET/POST /admin/v1/users`, `PUT/DELETE /admin/v1/users/:id`, `POST /admin/v1/users/:id/lock`, `POST /admin/v1/users/:id/unlock`, `POST /admin/v1/users/:id/suspend` | `auth7` | `auth7` |
-| Role & permission management | `GET/POST /admin/v1/roles`, `PUT/DELETE /admin/v1/roles/:id`, `GET /admin/v1/permissions`, `POST /admin/v1/roles/:id/permissions` | `auth7` | `auth7` |
-| Branch assignment (access scope) | `PUT /admin/v1/users/:id/branch-assignments`, `GET/POST /admin/v1/users/:id/branches`, `DELETE /admin/v1/users/:user_id/branches/:assignment_id` | `auth7` | `auth7` (projection + assignment) |
-| Session admin visibility/revocation | `GET /admin/v1/sessions`, `DELETE /admin/v1/sessions/:id`, `DELETE /admin/v1/users/:id/sessions` | `auth7` | `auth7` |
+| User lifecycle | `GET /users`, `GET /users/:id` | `POST /users/wf-create`, `PUT /users/:id/wf-update`, `POST /users/:id/wf-delete\|wf-lock\|wf-unlock\|wf-set-roles\|wf-set-branches` | `auth7` |
+| Role & permission | `GET /roles`, `GET /roles/:id`, `GET /roles/:id/permissions`, `GET /permissions` | `POST /roles/wf-create`, `PUT /roles/:id/wf-update`, `POST /roles/:id/wf-delete\|wf-set-permissions` | `auth7` |
+| OAuth2 client lifecycle | `GET /oauth2/clients`, `GET /oauth2/clients/:id` | `POST /oauth2/clients/wf-create`, `PUT /oauth2/clients/:id/wf-update`, `POST /oauth2/clients/:id/wf-delete` | `auth7` |
+| Branch (projection) & assignment | `GET /branch-types`, `GET /branches`, `GET /users/:id/branches`, `GET /branches/:id/roles` | via user `wf-set-branches` + `POST /branches/:id/wf-set-default-roles` | `auth7` (projection) |
+| Session admin | `GET /admin/v1/sessions`, `DELETE /admin/v1/sessions/:id` (direct) | — | `auth7` |
 | ~~Facade (`access/*`, `contracts/*`, `compatibility/*`)~~ | ~~`/admin/v1/facade/*`~~ — **RETIRED 2026-06-26** (facade.go dihapus) | — | — |
 
 Guardrail eksplisit:
