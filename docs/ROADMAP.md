@@ -33,11 +33,11 @@ Rekomendasi kesiapan cutover terakhir: **`NOT READY`**.
 > `core7-service-enterprise` = owner branch/employee master; `policy7` = owner policy/parameter; `bos7-enterprise` = admin UI utama.
 > Residual di bawah adalah pekerjaan **implementasi & wiring**, **bukan** perubahan boundary.
 
-### 2.1 Harmonization (auth7-side, implementasi bertahap)
+### 2.1 Harmonization (auth7-side)
 
-- **Payload response tidak seragam** — sebagian endpoint admin legacy memakai bentuk berbeda (`users` vs `data`) dibanding facade. Perlu diseragamkan.
-- **Not-found mapping tidak konsisten** — beberapa handler admin legacy masih fallback `500` alih-alih `404`.
-- **Parity enforcement org/branch/role scoping** — aturan sudah terkunci, tetapi enforcement parity antar seluruh endpoint admin perlu audit runtime lintas stream.
+- ✅ **Not-found mapping** — DONE (2026-06-26, commit `f811906`). Shared `respondError` di `internal/api/rest/admin/helpers.go` memetakan `ErrNotFound`/`pgx.ErrNoRows`→404, `ErrAlreadyExists`→409, `ErrPermissionDenied`→403; 41 error-site di handler legacy diretrofit.
+- ✅ **Payload envelope** — DITUTUP dengan keputusan: envelope legacy (`{users}`/`{roles}`/`{branches}`/…) **diresmikan sebagai kontrak kanonik**, BUKAN dimigrasi ke bentuk facade `{success,data,meta}`. Lihat [§2.5](#25-keputusan-facade-vs-legacy-2026-06-26).
+- ⏳ **Parity enforcement org/branch/role scoping** — aturan sudah terkunci, tetapi enforcement parity antar seluruh endpoint admin perlu audit runtime lintas stream.
 
 ### 2.2 Compatibility artifacts (target retire/sunset)
 
@@ -67,6 +67,23 @@ Tidak boleh menjadi runtime authority IAM — semua keputusan allow/deny harus d
 | `W5-S1-B02` | `core7-service-enterprise` (S3) | freeze final mapping role/menu/function source belum dinyatakan selesai |
 | `W5-S1-B03` | S5 + coordinator | parity test matrix legacy → permission auth7 belum disepakati |
 | `W5-S1-B04` | coordinator (`core7-devroot`) | tanggal sunset compatibility endpoints + rollback rule belum ditetapkan |
+
+### 2.5 Keputusan: Facade vs Legacy (2026-06-26)
+
+> **PROPOSED — perlu ratifikasi lintas-stream** (mengamandemen lock W2 di `specs/07-admin-api.md §1.4`).
+> Proposal lengkap: [`core7-devroot/docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md`](../../../docs/plans/integration/PLAN-13-FACADE-RETIREMENT-PROPOSAL.md).
+
+**Temuan:** dari 10 endpoint `/admin/v1/facade/*`, hanya `facade/access/permissions` yang dikonsumsi (oleh bos7-enterprise); 9 sisanya **nol konsumer** di seluruh devroot. Konsumer admin nyata = handler **legacy** `/admin/v1/*` (read) + `/internal/v1/*` wf-callbacks (write via workflow7).
+
+**Keputusan yang diusulkan:**
+- **TIDAK migrasi CRUD read ke facade (A2 dibatalkan).** auth7 & bos7-enterprise satu tim/satu devroot → ROI anti-corruption layer rendah; pain kontrak sudah ditutup A1 (§2.1).
+- **Legacy `/admin/v1/*` = kontrak Access Management kanonik.** Ini mengubah cutover condition §2.3 #1 (yang semula menuntut baca/tulis via facade).
+- **`facade/access/*` (duplikat CRUD) dipensiunkan**; repoint 1 pemakaian `facade/access/permissions` → `/admin/v1/permissions`.
+- **`facade/compatibility/*` + `facade/contracts/*`** (jembatan migrasi enterprise + snapshot boundary) — nasibnya diputuskan bersama S3 + coordinator (terkait blocker B02): simpan bila migrasi legacy enterprise masih live, retire bila sudah selesai.
+
+**Konsekuensi ke blocker:** kalau diratifikasi, B01 (wiring facade) dan B04 (sunset facade) **gugur/berubah bentuk** — bukan lagi "selesaikan migrasi ke facade" melainkan "resmikan legacy + pensiunkan facade".
+
+---
 
 **Referensi historis** (umbrella & bukti): `core7-devroot#200` (umbrella Plan 13), `auth7#114` (stream epic), `auth7#128` (W5 audit). Detail plan asli diarsipkan di `_backup/auth7-cleanup-20260625/docs/plans/`.
 
