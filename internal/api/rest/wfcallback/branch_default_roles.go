@@ -1,4 +1,4 @@
-package rest
+package wfcallback
 
 import (
 	"net/http"
@@ -11,25 +11,25 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// branchDefaultRolesWfHandler serves the workflow7 callback for setting a
+// BranchDefaultRolesWfHandler serves the workflow7 callback for setting a
 // branch's default roles (the roles auto-assigned to users joining that branch).
-// Replace-the-whole-set, mirroring handlePutBranchDefaultRoles but M2M-driven.
-// master_id (route :id) is the branch id; data.role_ids is the desired set.
-type branchDefaultRolesWfHandler struct {
+// Replace-the-whole-set; master_id (route :id) is the branch id; data.role_ids
+// is the desired set.
+type BranchDefaultRolesWfHandler struct {
 	store    *postgres.Store
 	auditSvc *audit.Service
 	logger   zerolog.Logger
 }
 
-func newBranchDefaultRolesWfHandler(store *postgres.Store, auditSvc *audit.Service, logger zerolog.Logger) *branchDefaultRolesWfHandler {
-	return &branchDefaultRolesWfHandler{store: store, auditSvc: auditSvc, logger: logger}
+func NewBranchDefaultRolesWfHandler(store *postgres.Store, auditSvc *audit.Service, logger zerolog.Logger) *BranchDefaultRolesWfHandler {
+	return &BranchDefaultRolesWfHandler{store: store, auditSvc: auditSvc, logger: logger}
 }
 
-func (h *branchDefaultRolesWfHandler) registerRoutes(g *gin.RouterGroup) {
+func (h *BranchDefaultRolesWfHandler) RegisterRoutes(g *gin.RouterGroup) {
 	g.POST("/branches/:id/wf-set-default-roles", h.handleWfSetDefaultRoles)
 }
 
-func (h *branchDefaultRolesWfHandler) handleWfSetDefaultRoles(c *gin.Context) {
+func (h *BranchDefaultRolesWfHandler) handleWfSetDefaultRoles(c *gin.Context) {
 	branchID, ok := paramID(c)
 	if !ok {
 		return

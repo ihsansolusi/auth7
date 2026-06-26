@@ -1,4 +1,4 @@
-package rest
+package wfcallback
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// wfUserToJSON mirrors admin.userToJSON (which is unexported) for audit snapshots.
+// wfUserToJSON renders a user for audit snapshots.
 func wfUserToJSON(u *domain.User) domain.JSON {
 	if u == nil {
 		return nil
@@ -31,43 +31,31 @@ func wfUserToJSON(u *domain.User) domain.JSON {
 	}
 }
 
-// userWfHandler serves the workflow7 service-task callbacks for the user
-// lifecycle and user-role / user-branch assignments. These run under
-// /internal/v1 (M2M-only) and are invoked by workflow7 once an auto-approval
-// flow reaches its PROCESS_TO_CORE step.
-//
-// Contract (mirrors the enterprise wf-* pattern):
-//   request  : { "data": {...}, "master_id": "<uuid|"">", "master_type": "AC_USER", "wf_instance_id": "<uuid>" }
-//   response : { "id": "<uuid>", "success": true }   on 2xx  (workflow7 on_complete_vars: $.id, $.success)
-//             non-2xx + { "error": ..., "success": false } on failure so workflow7 retries / fails the step.
-//
-// Unlike the /admin/v1 handlers, org_id and the acting user are NOT taken from
-// a user JWT (the caller is workflow7's M2M token). They travel inside `data`,
-// injected by the BFF from the initiator's JWT before the workflow was started.
-//
-// Assignments use REPLACE-the-whole-set semantics (master-detail): wf-set-roles
-// and wf-set-branches receive the full desired set and reconcile against the
-// current active rows. Roles are org-wide only (branch_id NULL).
-type userWfHandler struct {
-	userSvc     *adminUserSvc
-	userRoleSvc *adminUserRoleSvc
-	branchSvc   *adminBranchSvc
+// UserWfHandler serves the workflow7 service-task callbacks for the user
+// lifecycle and user-role / user-branch assignments. Assignments use
+// REPLACE-the-whole-set semantics: wf-set-roles and wf-set-branches receive the
+// full desired set and reconcile against the current active rows. Roles are
+// org-wide only (branch_id NULL).
+type UserWfHandler struct {
+	userSvc     UserService
+	userRoleSvc UserRoleService
+	branchSvc   BranchService
 	store       *postgres.Store
 	auditSvc    *audit.Service
 	mailer      mailer.Mailer
 	logger      zerolog.Logger
 }
 
-func newUserWfHandler(
-	userSvc *adminUserSvc,
-	userRoleSvc *adminUserRoleSvc,
-	branchSvc *adminBranchSvc,
+func NewUserWfHandler(
+	userSvc UserService,
+	userRoleSvc UserRoleService,
+	branchSvc BranchService,
 	store *postgres.Store,
 	auditSvc *audit.Service,
 	m mailer.Mailer,
 	logger zerolog.Logger,
-) *userWfHandler {
-	return &userWfHandler{
+) *UserWfHandler {
+	return &UserWfHandler{
 		userSvc:     userSvc,
 		userRoleSvc: userRoleSvc,
 		branchSvc:   branchSvc,
@@ -78,7 +66,7 @@ func newUserWfHandler(
 	}
 }
 
-func (h *userWfHandler) registerRoutes(g *gin.RouterGroup) {
+func (h *UserWfHandler) RegisterRoutes(g *gin.RouterGroup) {
 	users := g.Group("/users")
 	{
 		users.POST("/wf-create", h.handleWfCreate)
@@ -91,85 +79,7 @@ func (h *userWfHandler) registerRoutes(g *gin.RouterGroup) {
 	}
 }
 
-// ── envelope + helpers ────────────────────────────────────────────────────────
-
-type wfEnvelope struct {
-	Data         map[string]any `json:"data"`
-	MasterID     string         `json:"master_id"`
-	MasterType   string         `json:"master_type"`
-	WfInstanceID string         `json:"wf_instance_id"`
-}
-
-func dataStr(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func dataBool(m map[string]any, key string) bool {
-	if m == nil {
-		return false
-	}
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
-}
-
-func dataStrPtr(m map[string]any, key string) *string {
-	if m == nil {
-		return nil
-	}
-	raw, ok := m[key]
-	if !ok {
-		return nil
-	}
-	v, ok := raw.(string)
-	if !ok {
-		return nil
-	}
-	return &v
-}
-
-// dataMaps extracts an array-of-objects field (e.g. data.roles = [{role_id}]).
-func dataMaps(m map[string]any, key string) []map[string]any {
-	out := []map[string]any{}
-	if m == nil {
-		return out
-	}
-	arr, ok := m[key].([]any)
-	if !ok {
-		return out
-	}
-	for _, it := range arr {
-		if mm, ok := it.(map[string]any); ok {
-			out = append(out, mm)
-		}
-	}
-	return out
-}
-
-// bindEnvelope parses the workflow envelope and resolves org_id + actor from data.
-func (h *userWfHandler) bindEnvelope(c *gin.Context) (env wfEnvelope, orgID, actorID uuid.UUID, actorEmail string, ok bool) {
-	if err := c.ShouldBindJSON(&env); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "success": false})
-		return env, orgID, actorID, actorEmail, false
-	}
-	orgID, err := uuid.Parse(dataStr(env.Data, "org_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required", "success": false})
-		return env, orgID, actorID, actorEmail, false
-	}
-	actorID, _ = uuid.Parse(dataStr(env.Data, "actor_id"))
-	actorEmail = dataStr(env.Data, "actor_email")
-	return env, orgID, actorID, actorEmail, true
-}
-
-func (h *userWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
+func (h *UserWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
 		OrgID:         orgID,
 		ActorID:       actorID,
@@ -188,27 +98,10 @@ func (h *userWfHandler) audit(data map[string]any, wfInstanceID string, orgID, a
 	})
 }
 
-// uuidSetKeys / uuidSliceStr render id collections for audit before/after snapshots.
-func uuidSetKeys(m map[uuid.UUID]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k.String())
-	}
-	return out
-}
-
-func uuidSliceStr(s []uuid.UUID) []string {
-	out := make([]string, 0, len(s))
-	for _, u := range s {
-		out = append(out, u.String())
-	}
-	return out
-}
-
 // idLabels loads an id->label map (label = code/branch_code, fallback name) for a
 // reference table, so audit before/after snapshots show human-readable codes.
 // The query must SELECT (id, code, name) filtered by org_id = $1.
-func (h *userWfHandler) idLabels(ctx context.Context, query string, orgID uuid.UUID) map[string]string {
+func (h *UserWfHandler) idLabels(ctx context.Context, query string, orgID uuid.UUID) map[string]string {
 	m := map[string]string{}
 	rows, err := h.store.Pool().Query(ctx, query, orgID)
 	if err != nil {
@@ -233,40 +126,13 @@ func (h *userWfHandler) idLabels(ctx context.Context, query string, orgID uuid.U
 	return m
 }
 
-// mapToLabels maps id strings through a label map, falling back to the id.
-func mapToLabels(ids []string, labels map[string]string) []string {
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if l, ok := labels[id]; ok && l != "" {
-			out = append(out, l)
-		} else {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-func paramID(c *gin.Context) (uuid.UUID, bool) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id", "success": false})
-		return id, false
-	}
-	return id, true
-}
-
-func wfFail(c *gin.Context, logger zerolog.Logger, err error, msg string) {
-	logger.Error().Err(err).Msg(msg)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error", "success": false})
-}
-
 // ── user lifecycle ──────────────────────────────────────────────────────────
 
 // handleWfCreate creates the user and, atomically within the same callback,
 // applies the initial org-wide roles (data.roles = [{role_id}]) and the primary
 // branch (data.primary_branch_id). A failure in any step fails the workflow step.
-func (h *userWfHandler) handleWfCreate(c *gin.Context) {
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+func (h *UserWfHandler) handleWfCreate(c *gin.Context) {
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -343,12 +209,12 @@ func (h *userWfHandler) handleWfCreate(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (h *userWfHandler) handleWfUpdate(c *gin.Context) {
+func (h *UserWfHandler) handleWfUpdate(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return
 	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -374,12 +240,12 @@ func (h *userWfHandler) handleWfUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
-func (h *userWfHandler) handleWfDelete(c *gin.Context) {
+func (h *UserWfHandler) handleWfDelete(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return
 	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -392,24 +258,24 @@ func (h *userWfHandler) handleWfDelete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
-func (h *userWfHandler) handleWfLock(c *gin.Context) {
+func (h *UserWfHandler) handleWfLock(c *gin.Context) {
 	h.statusChange(c, "lock_user", func(c *gin.Context, id, orgID uuid.UUID) error {
 		return h.userSvc.LockUser(c.Request.Context(), id, orgID)
 	})
 }
 
-func (h *userWfHandler) handleWfUnlock(c *gin.Context) {
+func (h *UserWfHandler) handleWfUnlock(c *gin.Context) {
 	h.statusChange(c, "unlock_user", func(c *gin.Context, id, orgID uuid.UUID) error {
 		return h.userSvc.UnlockUser(c.Request.Context(), id, orgID)
 	})
 }
 
-func (h *userWfHandler) statusChange(c *gin.Context, action string, fn func(*gin.Context, uuid.UUID, uuid.UUID) error) {
+func (h *UserWfHandler) statusChange(c *gin.Context, action string, fn func(*gin.Context, uuid.UUID, uuid.UUID) error) {
 	id, ok := paramID(c)
 	if !ok {
 		return
 	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -425,12 +291,12 @@ func (h *userWfHandler) statusChange(c *gin.Context, action string, fn func(*gin
 
 // ── role assignment (replace whole set, org-wide only) ──────────────────────
 
-func (h *userWfHandler) handleWfSetRoles(c *gin.Context) {
+func (h *UserWfHandler) handleWfSetRoles(c *gin.Context) {
 	userID, ok := paramID(c)
 	if !ok {
 		return
 	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}
@@ -481,12 +347,12 @@ func (h *userWfHandler) handleWfSetRoles(c *gin.Context) {
 
 // ── branch assignment (replace whole set; exactly one primary) ──────────────
 
-func (h *userWfHandler) handleWfSetBranches(c *gin.Context) {
+func (h *UserWfHandler) handleWfSetBranches(c *gin.Context) {
 	userID, ok := paramID(c)
 	if !ok {
 		return
 	}
-	env, orgID, actorID, actorEmail, ok := h.bindEnvelope(c)
+	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
 	}

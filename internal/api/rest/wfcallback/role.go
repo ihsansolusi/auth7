@@ -1,4 +1,4 @@
-package rest
+package wfcallback
 
 import (
 	"net/http"
@@ -12,21 +12,19 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// roleWfHandler serves the workflow7 service-task callbacks for the role
-// lifecycle + permission assignment, mirroring the user wf-* pattern. Reuses the
-// package-level helpers from internal_user_wf.go (wfEnvelope, dataStr, dataMaps,
-// dataStrPtr, dataBool, paramID, wfFail).
-type roleWfHandler struct {
-	roleSvc  *adminRoleSvc
+// RoleWfHandler serves the workflow7 service-task callbacks for the role
+// lifecycle + permission assignment.
+type RoleWfHandler struct {
+	roleSvc  RoleService
 	auditSvc *audit.Service
 	logger   zerolog.Logger
 }
 
-func newRoleWfHandler(roleSvc *adminRoleSvc, auditSvc *audit.Service, logger zerolog.Logger) *roleWfHandler {
-	return &roleWfHandler{roleSvc: roleSvc, auditSvc: auditSvc, logger: logger}
+func NewRoleWfHandler(roleSvc RoleService, auditSvc *audit.Service, logger zerolog.Logger) *RoleWfHandler {
+	return &RoleWfHandler{roleSvc: roleSvc, auditSvc: auditSvc, logger: logger}
 }
 
-func (h *roleWfHandler) registerRoutes(g *gin.RouterGroup) {
+func (h *RoleWfHandler) RegisterRoutes(g *gin.RouterGroup) {
 	roles := g.Group("/roles")
 	{
 		roles.POST("/wf-create", h.handleWfCreate)
@@ -36,24 +34,7 @@ func (h *roleWfHandler) registerRoutes(g *gin.RouterGroup) {
 	}
 }
 
-// bindWfEnvelope parses the workflow envelope and resolves org_id + actor from
-// data (free-function variant usable by any wf handler in this package).
-func bindWfEnvelope(c *gin.Context) (env wfEnvelope, orgID, actorID uuid.UUID, actorEmail string, ok bool) {
-	if err := c.ShouldBindJSON(&env); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "success": false})
-		return env, orgID, actorID, actorEmail, false
-	}
-	orgID, err := uuid.Parse(dataStr(env.Data, "org_id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required", "success": false})
-		return env, orgID, actorID, actorEmail, false
-	}
-	actorID, _ = uuid.Parse(dataStr(env.Data, "actor_id"))
-	actorEmail = dataStr(env.Data, "actor_email")
-	return env, orgID, actorID, actorEmail, true
-}
-
-func (h *roleWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
+func (h *RoleWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceType, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
 		OrgID:         orgID,
 		ActorID:       actorID,
@@ -111,7 +92,7 @@ func permissionIDsFromData(data map[string]any) []uuid.UUID {
 	return out
 }
 
-func (h *roleWfHandler) handleWfCreate(c *gin.Context) {
+func (h *RoleWfHandler) handleWfCreate(c *gin.Context) {
 	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
@@ -138,7 +119,7 @@ func (h *roleWfHandler) handleWfCreate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": role.ID.String(), "success": true})
 }
 
-func (h *roleWfHandler) handleWfUpdate(c *gin.Context) {
+func (h *RoleWfHandler) handleWfUpdate(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return
@@ -161,7 +142,7 @@ func (h *roleWfHandler) handleWfUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
-func (h *roleWfHandler) handleWfDelete(c *gin.Context) {
+func (h *RoleWfHandler) handleWfDelete(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return
@@ -181,7 +162,7 @@ func (h *roleWfHandler) handleWfDelete(c *gin.Context) {
 
 // handleWfSetPermissions replaces the role's full permission set
 // (AssignPermissions already does delete-all + re-insert).
-func (h *roleWfHandler) handleWfSetPermissions(c *gin.Context) {
+func (h *RoleWfHandler) handleWfSetPermissions(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return

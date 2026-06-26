@@ -1,4 +1,4 @@
-package rest
+package wfcallback
 
 import (
 	"net/http"
@@ -11,21 +11,19 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// oauth2ClientWfHandler serves the workflow7 service-task callbacks for the
-// OAuth2 client lifecycle (CRUD; no sub-collections), mirroring the user/role
-// wf-* pattern. Reuses the package-level helpers (wfEnvelope, dataStr, dataBool,
-// dataStrPtr, paramID, wfFail, bindWfEnvelope).
-type oauth2ClientWfHandler struct {
-	clientSvc *adminOAuth2ClientSvc
+// OAuth2ClientWfHandler serves the workflow7 service-task callbacks for the
+// OAuth2 client lifecycle (CRUD; no sub-collections).
+type OAuth2ClientWfHandler struct {
+	clientSvc ClientService
 	auditSvc  *audit.Service
 	logger    zerolog.Logger
 }
 
-func newOAuth2ClientWfHandler(clientSvc *adminOAuth2ClientSvc, auditSvc *audit.Service, logger zerolog.Logger) *oauth2ClientWfHandler {
-	return &oauth2ClientWfHandler{clientSvc: clientSvc, auditSvc: auditSvc, logger: logger}
+func NewOAuth2ClientWfHandler(clientSvc ClientService, auditSvc *audit.Service, logger zerolog.Logger) *OAuth2ClientWfHandler {
+	return &OAuth2ClientWfHandler{clientSvc: clientSvc, auditSvc: auditSvc, logger: logger}
 }
 
-func (h *oauth2ClientWfHandler) registerRoutes(g *gin.RouterGroup) {
+func (h *OAuth2ClientWfHandler) RegisterRoutes(g *gin.RouterGroup) {
 	clients := g.Group("/oauth2/clients")
 	{
 		clients.POST("/wf-create", h.handleWfCreate)
@@ -34,44 +32,7 @@ func (h *oauth2ClientWfHandler) registerRoutes(g *gin.RouterGroup) {
 	}
 }
 
-// dataInt reads a numeric field (JSON numbers decode to float64).
-func dataInt(m map[string]any, key string) int {
-	if m == nil {
-		return 0
-	}
-	switch v := m[key].(type) {
-	case float64:
-		return int(v)
-	case int:
-		return v
-	}
-	return 0
-}
-
-// dataStrSlice reads an array-of-strings field (e.g. allowed_scopes).
-func dataStrSlice(m map[string]any, key string) []string {
-	out := []string{}
-	if m == nil {
-		return out
-	}
-	arr, ok := m[key].([]any)
-	if !ok {
-		return out
-	}
-	for _, it := range arr {
-		if s, ok := it.(string); ok && s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// audit records the mutation locally and forwards it to audit7, populating the
-// request context (ip/ua/branch/session) from the workflow `data` payload that
-// the bos7 BFF injects via withInitiator; correlation_id = the wf instance id.
-// Mirrors userWfHandler.audit so client CRUD carries the same context as user
-// CRUD.
-func (h *oauth2ClientWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceID string, oldV, newV domain.JSON) {
+func (h *OAuth2ClientWfHandler) audit(data map[string]any, wfInstanceID string, orgID, actorID uuid.UUID, actorEmail, action, resourceID string, oldV, newV domain.JSON) {
 	h.auditSvc.LogAsync(audit.LogInput{
 		OrgID:         orgID,
 		ActorID:       actorID,
@@ -95,15 +56,15 @@ func wfClientToJSON(c *domain.Client) domain.JSON {
 		return nil
 	}
 	return domain.JSON{
-		"id":         c.ID.String(),
-		"client_id":  c.ClientID,
-		"name":       c.Name,
+		"id":          c.ID.String(),
+		"client_id":   c.ClientID,
+		"name":        c.Name,
 		"client_type": string(c.ClientType),
-		"is_active":  c.IsActive,
+		"is_active":   c.IsActive,
 	}
 }
 
-func (h *oauth2ClientWfHandler) handleWfCreate(c *gin.Context) {
+func (h *OAuth2ClientWfHandler) handleWfCreate(c *gin.Context) {
 	env, orgID, actorID, actorEmail, ok := bindWfEnvelope(c)
 	if !ok {
 		return
@@ -131,7 +92,7 @@ func (h *oauth2ClientWfHandler) handleWfCreate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": client.ID.String(), "success": true})
 }
 
-func (h *oauth2ClientWfHandler) handleWfUpdate(c *gin.Context) {
+func (h *OAuth2ClientWfHandler) handleWfUpdate(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return
@@ -174,7 +135,7 @@ func (h *oauth2ClientWfHandler) handleWfUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"id": id.String(), "success": true})
 }
 
-func (h *oauth2ClientWfHandler) handleWfDelete(c *gin.Context) {
+func (h *OAuth2ClientWfHandler) handleWfDelete(c *gin.Context) {
 	id, ok := paramID(c)
 	if !ok {
 		return

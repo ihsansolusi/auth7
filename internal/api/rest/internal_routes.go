@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/api/rest/wfcallback"
 	"github.com/ihsansolusi/auth7/internal/mailer"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
@@ -39,7 +40,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	internalV1.GET("/user-context/:user_id", s.handleInternalUserContext(store))
 
 	// workflow7 service-task callbacks for the user lifecycle + assignments.
-	newUserWfHandler(
+	wfcallback.NewUserWfHandler(
 		newAdminUserSvc(store),
 		newAdminUserRoleSvc(store),
 		newAdminBranchSvc(store),
@@ -47,16 +48,16 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 		auditSvc,
 		m,
 		s.deps.Logger,
-	).registerRoutes(internalV1)
+	).RegisterRoutes(internalV1)
 
 	// workflow7 service-task callbacks for the role lifecycle + permission assignment.
-	newRoleWfHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).registerRoutes(internalV1)
+	wfcallback.NewRoleWfHandler(newAdminRoleSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(internalV1)
 
 	// workflow7 service-task callbacks for the OAuth2 client lifecycle.
-	newOAuth2ClientWfHandler(newAdminOAuth2ClientSvc(store), auditSvc, s.deps.Logger).registerRoutes(internalV1)
+	wfcallback.NewOAuth2ClientWfHandler(newAdminOAuth2ClientSvc(store), auditSvc, s.deps.Logger).RegisterRoutes(internalV1)
 
 	// workflow7 service-task callback for branch default-roles config (replace-set).
-	newBranchDefaultRolesWfHandler(store, auditSvc, s.deps.Logger).registerRoutes(internalV1)
+	wfcallback.NewBranchDefaultRolesWfHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(internalV1)
 }
 
 // newAudit7Forwarder builds the durable JetStream audit forwarder from the NATS
