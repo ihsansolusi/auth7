@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/api/rest/wfcallback"
 	"github.com/ihsansolusi/auth7/internal/mailer"
+	"github.com/ihsansolusi/auth7/internal/service/authz"
 	"github.com/ihsansolusi/auth7/internal/service/audit"
 	jwtpkg "github.com/ihsansolusi/auth7/internal/service/jwt"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
@@ -62,7 +63,7 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 	// authz PDP (Policy Decision Point): M2M decision endpoints for other Core7
 	// services (PEPs) — role-based permission check + operational-hours time-gate.
 	// auth7 resolves the user's effective permissions from its own role data.
-	checker := newTimeGatedChecker(s.deps.TimeWindow, s.deps.TimeGatedPermissions)
+	checker := authz.NewTimeGatedChecker(s.deps.TimeWindow, s.deps.TimeGatedPermissions)
 	newAuthzPDPHandler(newAdminUserRoleSvc(store), newAdminRoleSvc(store), checker, s.deps.Logger).registerRoutes(internalV1)
 }
 
