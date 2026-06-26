@@ -37,7 +37,7 @@ Rekomendasi kesiapan cutover terakhir: **`NOT READY`**.
 
 - ✅ **Not-found mapping** — DONE (2026-06-26, commit `f811906`). Shared `respondError` di `internal/api/rest/admin/helpers.go` memetakan `ErrNotFound`/`pgx.ErrNoRows`→404, `ErrAlreadyExists`→409, `ErrPermissionDenied`→403; 41 error-site di handler legacy diretrofit.
 - ✅ **Payload envelope** — DITUTUP dengan keputusan: envelope legacy (`{users}`/`{roles}`/`{branches}`/…) **diresmikan sebagai kontrak kanonik**, BUKAN dimigrasi ke bentuk facade `{success,data,meta}`. Lihat [§2.5](#25-keputusan-facade-vs-legacy-2026-06-26).
-- ⏳ **Parity enforcement org/branch/role scoping** — aturan sudah terkunci, tetapi enforcement parity antar seluruh endpoint admin perlu audit runtime lintas stream.
+- ✅ **Parity enforcement org/branch/role scoping** — DONE (2026-06-26). Audit + fix: (F1) `GET /admin/v1/sessions` kini di-scope ke org pemanggil (sebelumnya bocor lintas-org); (F2/F4) shared `requireOrgID` menjadikan klaim JWT sebagai sumber org otoritatif + 400 konsisten untuk org invalid, diretrofit ke seluruh handler admin; (F3) middleware menolak token tanpa org-binding kecuali `super_admin`. Regular admin tidak bisa lintas-org (403 di middleware); super_admin tetap `*:*`. Tertutup unit test (`requireOrgID`, session scoping, middleware empty-org/mismatch).
 
 ### 2.2 Compatibility artifacts (target retire/sunset)
 

@@ -143,6 +143,60 @@ func TestAdminAuthMiddleware_NonAdminRole(t *testing.T) {
 	}
 }
 
+func runAdminAuth(claims *mockClaims, requestOrgID string) *httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	auditLogger := audit.NewService(nil)
+	cfg := middleware.DefaultAdminAuthConfig()
+
+	r.Use(func(c *gin.Context) { c.Set("claims", claims); c.Next() })
+	r.GET("/admin/test", middleware.AdminAuth(cfg, auditLogger, zerolog.Nop()), func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	url := "/admin/test"
+	if requestOrgID != "" {
+		url += "?org_id=" + requestOrgID
+	}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestAdminAuth_EmptyOrgRequiresSuperAdmin(t *testing.T) {
+	// admin role + empty org binding → must be rejected (only super_admin may be org-less)
+	w := runAdminAuth(&mockClaims{subject: uuid.New().String(), orgID: "", roles: []string{"admin"}}, "")
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for org-less admin, got %d", w.Code)
+	}
+}
+
+func TestAdminAuth_EmptyOrgSuperAdminAllowed(t *testing.T) {
+	w := runAdminAuth(&mockClaims{subject: uuid.New().String(), orgID: "", roles: []string{"super_admin"}}, "")
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for org-less super_admin, got %d", w.Code)
+	}
+}
+
+func TestAdminAuth_OrgMismatchForbidden(t *testing.T) {
+	orgA := uuid.New().String()
+	orgB := uuid.New().String()
+	w := runAdminAuth(&mockClaims{subject: uuid.New().String(), orgID: orgA, roles: []string{"admin"}}, orgB)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for cross-org query, got %d", w.Code)
+	}
+}
+
+func TestAdminAuth_OrgMatchAllowed(t *testing.T) {
+	orgA := uuid.New().String()
+	w := runAdminAuth(&mockClaims{subject: uuid.New().String(), orgID: orgA, roles: []string{"admin"}}, orgA)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for matching org, got %d", w.Code)
+	}
+}
+
 func TestAuditLogService_Log(t *testing.T) {
 	store := &mockAuditStore{}
 	svc := audit.NewService(store)

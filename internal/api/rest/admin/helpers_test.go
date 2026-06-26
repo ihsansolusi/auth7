@@ -46,6 +46,56 @@ func TestRespondError_StatusMapping(t *testing.T) {
 	}
 }
 
+type fakeOrgClaims struct{ org string }
+
+func (f fakeOrgClaims) GetOrgID() string { return f.org }
+
+func TestRequireOrgID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const claimOrg = "11111111-1111-1111-1111-111111111111"
+	const otherOrg = "22222222-2222-2222-2222-222222222222"
+
+	newCtx := func(query, claimOrgVal string, hasClaim bool) (*gin.Context, *httptest.ResponseRecorder) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/"+query, nil)
+		if hasClaim {
+			c.Set("claims", fakeOrgClaims{org: claimOrgVal})
+		}
+		return c, w
+	}
+
+	t.Run("claim is authoritative (query ignored)", func(t *testing.T) {
+		c, _ := newCtx("?org_id="+otherOrg, claimOrg, true)
+		got, ok := requireOrgID(c)
+		if !ok || got.String() != claimOrg {
+			t.Fatalf("expected %s ok=true, got %s ok=%v", claimOrg, got, ok)
+		}
+	})
+
+	t.Run("empty claim falls back to query (super_admin)", func(t *testing.T) {
+		c, _ := newCtx("?org_id="+otherOrg, "", true)
+		got, ok := requireOrgID(c)
+		if !ok || got.String() != otherOrg {
+			t.Fatalf("expected %s ok=true, got %s ok=%v", otherOrg, got, ok)
+		}
+	})
+
+	t.Run("no claim + no query → 400", func(t *testing.T) {
+		c, w := newCtx("", "", false)
+		if _, ok := requireOrgID(c); ok || w.Code != http.StatusBadRequest {
+			t.Fatalf("expected ok=false + 400, got ok=%v code=%d", ok, w.Code)
+		}
+	})
+
+	t.Run("invalid org_id → 400", func(t *testing.T) {
+		c, w := newCtx("?org_id=not-a-uuid", "", true)
+		if _, ok := requireOrgID(c); ok || w.Code != http.StatusBadRequest {
+			t.Fatalf("expected ok=false + 400, got ok=%v code=%d", ok, w.Code)
+		}
+	})
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {

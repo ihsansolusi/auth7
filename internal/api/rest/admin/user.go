@@ -70,17 +70,8 @@ func (h *UserHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *UserHandler) handleListUsers(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
-		return
-	}
-	orgID, err := uuid.Parse(orgStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
 
@@ -90,7 +81,7 @@ func (h *UserHandler) handleListUsers(c *gin.Context) {
 
 	users, total, err := h.userSvc.ListUsers(c.Request.Context(), orgID, limit, offset, status)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("list users failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("list users failed")
 		respondError(c, err)
 		return
 	}
@@ -104,17 +95,8 @@ func (h *UserHandler) handleListUsers(c *gin.Context) {
 }
 
 func (h *UserHandler) handleCreateUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
-		return
-	}
-	orgID, err := uuid.Parse(orgStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
 
@@ -126,7 +108,7 @@ func (h *UserHandler) handleCreateUser(c *gin.Context) {
 
 	user, err := h.userSvc.CreateUser(c.Request.Context(), orgID, input)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("create user failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("create user failed")
 		respondError(c, err)
 		return
 	}
@@ -137,15 +119,10 @@ func (h *UserHandler) handleCreateUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleGetUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -164,15 +141,10 @@ func (h *UserHandler) handleGetUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleUpdateUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -201,15 +173,10 @@ func (h *UserHandler) handleUpdateUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleDeleteUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -231,12 +198,10 @@ func (h *UserHandler) handleDeleteUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleLockUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -258,12 +223,10 @@ func (h *UserHandler) handleLockUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleUnlockUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -285,12 +248,10 @@ func (h *UserHandler) handleUnlockUser(c *gin.Context) {
 }
 
 func (h *UserHandler) handleSuspendUser(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {

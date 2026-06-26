@@ -66,23 +66,14 @@ func (h *RoleHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *RoleHandler) handleListRoles(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
-		return
-	}
-	orgID, err := uuid.Parse(orgStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
 
 	roles, err := h.roleSvc.ListRoles(c.Request.Context(), orgID)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("list roles failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("list roles failed")
 		respondError(c, err)
 		return
 	}
@@ -91,15 +82,10 @@ func (h *RoleHandler) handleListRoles(c *gin.Context) {
 }
 
 func (h *RoleHandler) handleCreateRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	var input CreateRoleInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -109,7 +95,7 @@ func (h *RoleHandler) handleCreateRole(c *gin.Context) {
 
 	role, err := h.roleSvc.CreateRole(c.Request.Context(), orgID, input)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("create role failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("create role failed")
 		respondError(c, err)
 		return
 	}
@@ -120,15 +106,10 @@ func (h *RoleHandler) handleCreateRole(c *gin.Context) {
 }
 
 func (h *RoleHandler) handleGetRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -147,15 +128,10 @@ func (h *RoleHandler) handleGetRole(c *gin.Context) {
 }
 
 func (h *RoleHandler) handleUpdateRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -184,15 +160,10 @@ func (h *RoleHandler) handleUpdateRole(c *gin.Context) {
 }
 
 func (h *RoleHandler) handleDeleteRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -232,12 +203,10 @@ func (h *RoleHandler) handleGetRolePermissions(c *gin.Context) {
 }
 
 func (h *RoleHandler) handleAssignPermissions(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {

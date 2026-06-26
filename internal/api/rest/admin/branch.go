@@ -103,15 +103,10 @@ func (h *BranchHandler) RegisterBranchRoutes(r *gin.RouterGroup) {
 }
 
 func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	branchTypes, err := h.branchSvc.ListBranchTypes(c.Request.Context(), orgID)
 	if err != nil {
@@ -124,15 +119,10 @@ func (h *BranchHandler) handleListBranchTypes(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleCreateBranchType(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	var params BranchTypeParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -153,15 +143,10 @@ func (h *BranchHandler) handleCreateBranchType(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleGetBranchType(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	bt, err := h.branchSvc.GetBranchType(c.Request.Context(), id, orgID)
@@ -175,15 +160,10 @@ func (h *BranchHandler) handleGetBranchType(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleUpdateBranchType(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	oldBT, _ := h.branchSvc.GetBranchType(c.Request.Context(), id, orgID)
@@ -207,15 +187,10 @@ func (h *BranchHandler) handleUpdateBranchType(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleDeleteBranchType(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	oldBT, _ := h.branchSvc.GetBranchType(c.Request.Context(), id, orgID)
@@ -232,12 +207,10 @@ func (h *BranchHandler) handleDeleteBranchType(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleListBranches(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	branches, err := h.branchSvc.ListBranches(c.Request.Context(), orgID)
 	if err != nil {
@@ -250,12 +223,10 @@ func (h *BranchHandler) handleListBranches(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleCreateBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	var params BranchParams
 	if err := c.ShouldBindJSON(&params); err != nil {
@@ -276,12 +247,10 @@ func (h *BranchHandler) handleCreateBranch(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleGetBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	branch, err := h.branchSvc.GetBranch(c.Request.Context(), id, orgID)
@@ -295,12 +264,10 @@ func (h *BranchHandler) handleGetBranch(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleUpdateBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	oldBranch, _ := h.branchSvc.GetBranch(c.Request.Context(), id, orgID)
@@ -324,12 +291,10 @@ func (h *BranchHandler) handleUpdateBranch(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleDeleteBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	id, _ := uuid.Parse(c.Param("id"))
 
 	oldBranch, _ := h.branchSvc.GetBranch(c.Request.Context(), id, orgID)
@@ -359,12 +324,10 @@ func (h *BranchHandler) handleGetUserBranches(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleAssignUserToBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	userID, _ := uuid.Parse(c.Param("id"))
 
 	var params UserBranchParams
@@ -391,12 +354,10 @@ func (h *BranchHandler) handleAssignUserToBranch(c *gin.Context) {
 }
 
 func (h *BranchHandler) handleRevokeUserBranch(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(400, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	assignmentID, _ := uuid.Parse(c.Param("assignment_id"))
 
 	if err := h.branchSvc.RevokeUserBranch(c.Request.Context(), assignmentID, orgID, uuid.Nil); err != nil {

@@ -211,6 +211,35 @@ func TestListSessions_ServiceError(t *testing.T) {
 	}
 }
 
+func TestListSessions_OrgScoped(t *testing.T) {
+	// buildSessionRouter injects a claim with org ...0002 and role "admin".
+	mine := makeTestSession("sess-mine", "user-1") // OrgID ...0002 (caller's org)
+	other := makeTestSession("sess-other", "user-2")
+	other.OrgID = "00000000-0000-0000-0000-000000000099" // different org
+	svc := &mockSessionSvc{sessions: []*session.SessionData{mine, other}}
+	r := buildSessionRouter(svc)
+
+	req, _ := http.NewRequest(http.MethodGet, "/admin/v1/sessions", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if total, _ := resp["total"].(float64); int(total) != 1 {
+		t.Errorf("expected total=1 (org-scoped), got %v", resp["total"])
+	}
+	items, _ := resp["sessions"].([]interface{})
+	if len(items) != 1 {
+		t.Fatalf("expected 1 session for caller org, got %d (cross-tenant leak)", len(items))
+	}
+	if first, _ := items[0].(map[string]interface{}); first["session_id"] != "sess-mine" {
+		t.Errorf("expected only caller-org session sess-mine, got %v", first["session_id"])
+	}
+}
+
 // ── DELETE /admin/v1/sessions/:id ────────────────────────────────────────────
 
 func TestRevokeSession_Success(t *testing.T) {

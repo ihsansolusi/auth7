@@ -39,12 +39,10 @@ func (h *UserRoleHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *UserRoleHandler) handleAssignRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
@@ -82,12 +80,10 @@ func (h *UserRoleHandler) handleAssignRole(c *gin.Context) {
 }
 
 func (h *UserRoleHandler) handleRevokeRole(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	userID, _ := uuid.Parse(c.Param("id"))
 	roleID, _ := uuid.Parse(c.Param("role_id"))
 

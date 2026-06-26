@@ -74,23 +74,14 @@ func (h *OAuth2ClientHandler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
-		return
-	}
-	orgID, err := uuid.Parse(orgStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org_id"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
 
 	clients, err := h.clientSvc.ListClients(c.Request.Context(), orgID)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("list clients failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("list clients failed")
 		respondError(c, err)
 		return
 	}
@@ -99,15 +90,10 @@ func (h *OAuth2ClientHandler) handleListClients(c *gin.Context) {
 }
 
 func (h *OAuth2ClientHandler) handleCreateClient(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 
 	var input CreateClientInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -117,7 +103,7 @@ func (h *OAuth2ClientHandler) handleCreateClient(c *gin.Context) {
 
 	client, err := h.clientSvc.CreateClient(c.Request.Context(), orgID, input)
 	if err != nil {
-		h.logger.Error().Err(err).Str("org", orgStr).Msg("create client failed")
+		h.logger.Error().Err(err).Str("org", orgID.String()).Msg("create client failed")
 		respondError(c, err)
 		return
 	}
@@ -146,15 +132,10 @@ func (h *OAuth2ClientHandler) handleGetClient(c *gin.Context) {
 }
 
 func (h *OAuth2ClientHandler) handleUpdateClient(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		orgStr = claimsOrgID(c)
-	}
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -183,12 +164,10 @@ func (h *OAuth2ClientHandler) handleUpdateClient(c *gin.Context) {
 }
 
 func (h *OAuth2ClientHandler) handleDeleteClient(c *gin.Context) {
-	orgStr := c.Query("org_id")
-	if orgStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "org_id required"})
+	orgID, ok := requireOrgID(c)
+	if !ok {
 		return
 	}
-	orgID, _ := uuid.Parse(orgStr)
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {

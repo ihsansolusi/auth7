@@ -137,7 +137,28 @@ func AdminAuth(cfg AdminAuthConfig, auditLogger *audit.Service, logger zerolog.L
 		if cfg.RequireOrgMatch {
 			orgID := c.Query("org_id")
 			tokenOrgID := tokenClaims.GetOrgID()
-			if orgID != "" && tokenOrgID != "" && orgID != tokenOrgID {
+			if tokenOrgID == "" {
+				// A token with no org binding can only be a cross-org (platform)
+				// operator. Reserve that for super_admin; otherwise an org-less
+				// "admin" token could read/write any org via ?org_id=.
+				isSuperAdmin := false
+				for _, role := range tokenClaims.GetRoles() {
+					if strings.ToLower(role) == "super_admin" {
+						isSuperAdmin = true
+						break
+					}
+				}
+				if !isSuperAdmin {
+					logger.Warn().
+						Str("subject", tokenClaims.GetSubject()).
+						Strs("roles", tokenClaims.GetRoles()).
+						Str("request_org", orgID).
+						Msg("admin without org binding is not super_admin")
+					c.JSON(http.StatusForbidden, gin.H{"error": "org binding required"})
+					c.Abort()
+					return
+				}
+			} else if orgID != "" && orgID != tokenOrgID {
 				logger.Warn().
 					Str("subject", tokenClaims.GetSubject()).
 					Str("token_org", tokenOrgID).

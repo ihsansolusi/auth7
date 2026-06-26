@@ -76,6 +76,19 @@ func (h *SessionHandler) handleListSessions(c *gin.Context) {
 		return
 	}
 
+	// Tenant scoping: a regular admin sees only sessions in their own org.
+	// super_admin (empty org claim) sees all orgs — ListAllSessions is global,
+	// so without this filter every admin would see cross-tenant sessions.
+	if callerOrg := claimsOrgID(c); callerOrg != "" {
+		scoped := make([]*session.SessionData, 0, len(all))
+		for _, s := range all {
+			if s.OrgID == callerOrg {
+				scoped = append(scoped, s)
+			}
+		}
+		all = scoped
+	}
+
 	total := len(all)
 	offset := (page - 1) * pageSize
 
