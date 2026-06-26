@@ -58,6 +58,12 @@ func (s *Server) RegisterInternalV1Routes(r *gin.Engine, m mailer.Mailer) {
 
 	// workflow7 service-task callback for branch default-roles config (replace-set).
 	wfcallback.NewBranchDefaultRolesWfHandler(store, auditSvc, s.deps.Logger).RegisterRoutes(internalV1)
+
+	// authz PDP (Policy Decision Point): M2M decision endpoints for other Core7
+	// services (PEPs) — role-based permission check + operational-hours time-gate.
+	// auth7 resolves the user's effective permissions from its own role data.
+	checker := newTimeGatedChecker(s.deps.TimeWindow, s.deps.TimeGatedPermissions)
+	newAuthzPDPHandler(newAdminUserRoleSvc(store), newAdminRoleSvc(store), checker, s.deps.Logger).registerRoutes(internalV1)
 }
 
 // newAudit7Forwarder builds the durable JetStream audit forwarder from the NATS
