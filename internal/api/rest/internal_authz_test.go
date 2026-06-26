@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/ihsansolusi/auth7/internal/domain"
+	"github.com/ihsansolusi/auth7/internal/service/authz"
 	"github.com/rs/zerolog"
 )
 
@@ -30,7 +31,7 @@ func buildPDPRouter(userRoles []*domain.UserRole, perms map[uuid.UUID][]*domain.
 	r := gin.New()
 	// No time-gate (tw=nil) → role-based decision only; time-gate is covered by
 	// the authz package's own tests.
-	checker := newTimeGatedChecker(nil, nil)
+	checker := authz.NewTimeGatedChecker(nil, nil)
 	h := newAuthzPDPHandler(fakeUserRoles{roles: userRoles}, fakeRolePerms{byRole: perms}, checker, zerolog.Nop())
 	g := r.Group("/internal/v1")
 	h.registerRoutes(g)

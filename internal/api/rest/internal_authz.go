@@ -1,44 +1,45 @@
 package rest
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/ihsansolusi/auth7/internal/domain"
+	"github.com/ihsansolusi/auth7/internal/api/grpc/authcheck"
 	"github.com/ihsansolusi/auth7/internal/service/authz"
+	"github.com/ihsansolusi/auth7/internal/store/postgres"
 	"github.com/rs/zerolog"
 )
 
-// authz PDP (Policy Decision Point) — M2M endpoints under /internal/v1 that let
-// other Core7 services (PEPs) ask auth7 whether a user may perform a permission,
-// with the operational-hours time-gate applied. auth7 resolves the user's
-// effective permissions from its own role/permission data (authoritative), so
-// callers pass only identity + the permission being checked.
+// NewAuthCheckGRPCServer builds the gRPC AuthCheckService server (lib7
+// auth7grpc contract) sharing the same decision core as the REST PDP. Returns
+// nil if the store is not a *postgres.Store. Started by cmd/server/start.go.
+func NewAuthCheckGRPCServer(deps ServerDeps) *authcheck.Server {
+	store, ok := deps.Store.(*postgres.Store)
+	if !ok {
+		return nil
+	}
+	checker := authz.NewTimeGatedChecker(deps.TimeWindow, deps.TimeGatedPermissions)
+	return authcheck.NewServer(newAdminUserRoleSvc(store), newAdminRoleSvc(store), checker, deps.Logger)
+}
+
+// authz PDP (Policy Decision Point) — M2M REST endpoints under /internal/v1 that
+// let other Core7 services (PEPs) ask auth7 whether a user may perform a
+// permission, with the operational-hours time-gate applied. auth7 resolves the
+// user's effective permissions from its own role data (authoritative).
 //
-// Transport is REST (the proto AuthCheckService is not yet codegen'd); the
-// decision logic is authz.PermissionChecker, shared with the (future) gRPC path.
-
-// userRolesGetter / rolePermsGetter are the read surface used to resolve a
-// user's effective permissions. Satisfied by the concrete admin service
-// adapters (adminUserRoleSvc, adminRoleSvc).
-type userRolesGetter interface {
-	GetUserRoles(ctx interface{}, userID uuid.UUID) ([]*domain.UserRole, error)
-}
-
-type rolePermsGetter interface {
-	GetPermissions(ctx interface{}, roleID uuid.UUID) ([]*domain.Permission, error)
-}
+// This is the REST surface; the gRPC surface (lib7 auth7grpc contract) lives in
+// internal/api/grpc/authcheck and shares the same authz.PermissionChecker +
+// authz.ResolveAuthContext decision core.
 
 type authzPDPHandler struct {
-	userRoleSvc userRolesGetter
-	roleSvc     rolePermsGetter
+	userRoleSvc authz.UserRolesGetter
+	roleSvc     authz.RolePermsGetter
 	checker     *authz.PermissionChecker
 	logger      zerolog.Logger
 }
 
-func newAuthzPDPHandler(userRoleSvc userRolesGetter, roleSvc rolePermsGetter, checker *authz.PermissionChecker, logger zerolog.Logger) *authzPDPHandler {
+func newAuthzPDPHandler(userRoleSvc authz.UserRolesGetter, roleSvc authz.RolePermsGetter, checker *authz.PermissionChecker, logger zerolog.Logger) *authzPDPHandler {
 	return &authzPDPHandler{userRoleSvc: userRoleSvc, roleSvc: roleSvc, checker: checker, logger: logger}
 }
 
@@ -59,7 +60,6 @@ type pdpCheckRequest struct {
 	ResourceID   string `json:"resource_id"`
 }
 
-// parseIdentity validates the common identity fields shared by both endpoints.
 func (h *authzPDPHandler) parseIdentity(c *gin.Context, req *pdpCheckRequest) (userID, orgID, branchID uuid.UUID, ok bool) {
 	var err error
 	if userID, err = uuid.Parse(req.UserID); err != nil {
@@ -81,46 +81,6 @@ func (h *authzPDPHandler) parseIdentity(c *gin.Context, req *pdpCheckRequest) (u
 	return userID, orgID, branchID, true
 }
 
-// resolveAuthContext loads the user's effective (org-wide + this-branch) active
-// permissions and builds the ABAC AuthContext.
-func (h *authzPDPHandler) resolveAuthContext(ctx context.Context, userID, orgID, branchID uuid.UUID) (*domain.AuthContext, error) {
-	userRoles, err := h.userRoleSvc.GetUserRoles(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := map[string]bool{}
-	perms := []string{}
-	for _, ur := range userRoles {
-		if ur == nil || ur.OrgID != orgID || !ur.IsActive() {
-			continue
-		}
-		// org-wide (branch_id NULL) always applies; branch-scoped only for this branch.
-		if ur.BranchID != nil && *ur.BranchID != branchID {
-			continue
-		}
-		rolePerms, perr := h.roleSvc.GetPermissions(ctx, ur.RoleID)
-		if perr != nil {
-			return nil, perr
-		}
-		for _, p := range rolePerms {
-			if p == nil || p.Code == "" || seen[p.Code] {
-				continue
-			}
-			seen[p.Code] = true
-			perms = append(perms, p.Code)
-		}
-	}
-
-	return &domain.AuthContext{
-		UserID:      userID,
-		OrgID:       orgID,
-		BranchID:    branchID,
-		Permissions: perms,
-		BranchScope: domain.BranchScopeAssigned,
-	}, nil
-}
-
 func (h *authzPDPHandler) handleCheck(c *gin.Context) {
 	var req pdpCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -132,7 +92,7 @@ func (h *authzPDPHandler) handleCheck(c *gin.Context) {
 		return
 	}
 
-	authCtx, err := h.resolveAuthContext(c.Request.Context(), userID, orgID, branchID)
+	authCtx, err := authz.ResolveAuthContext(c.Request.Context(), h.userRoleSvc, h.roleSvc, userID, orgID, branchID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("user", req.UserID).Msg("pdp resolve auth context failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
@@ -165,7 +125,7 @@ func (h *authzPDPHandler) handleCheckDataAccess(c *gin.Context) {
 		return
 	}
 
-	authCtx, err := h.resolveAuthContext(c.Request.Context(), userID, orgID, branchID)
+	authCtx, err := authz.ResolveAuthContext(c.Request.Context(), h.userRoleSvc, h.roleSvc, userID, orgID, branchID)
 	if err != nil {
 		h.logger.Error().Err(err).Str("user", req.UserID).Msg("pdp resolve auth context failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_error"})
@@ -184,63 +144,4 @@ func (h *authzPDPHandler) handleCheckDataAccess(c *gin.Context) {
 		"reason":      result.Reason,
 		"field_masks": result.FieldMasks,
 	})
-}
-
-// ── no-op authz stores ──────────────────────────────────────────────────────
-// The PDP path pre-populates AuthContext.Permissions and relies on the
-// role-based check + time-gate (+ empty-ABAC = allow-by-default). The enforcer,
-// ABAC policy store, and role store are not exercised, but PermissionChecker /
-// ABACEvaluator require non-nil deps — these satisfy the interfaces.
-
-type noopEnforcer struct{}
-
-func (noopEnforcer) UpdateRolePermissions(context.Context, uuid.UUID, uuid.UUID, string, []string) error {
-	return nil
-}
-func (noopEnforcer) GrantUserRole(context.Context, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
-	return nil
-}
-func (noopEnforcer) RevokeUserRole(context.Context, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
-	return nil
-}
-func (noopEnforcer) Enforce(context.Context, *domain.AuthContext, string, interface{}) (*domain.AuthorizationResult, error) {
-	return &domain.AuthorizationResult{Allowed: true, Reason: "enforcer disabled"}, nil
-}
-func (noopEnforcer) LoadPolicies(context.Context, uuid.UUID) error { return nil }
-
-type noopABACStore struct{}
-
-func (noopABACStore) Create(context.Context, *domain.ABACPolicy) error            { return nil }
-func (noopABACStore) GetByID(context.Context, uuid.UUID, uuid.UUID) (*domain.ABACPolicy, error) {
-	return nil, nil
-}
-func (noopABACStore) Update(context.Context, *domain.ABACPolicy) error            { return nil }
-func (noopABACStore) Delete(context.Context, uuid.UUID, uuid.UUID) error          { return nil }
-func (noopABACStore) ListByOrg(context.Context, uuid.UUID) ([]*domain.ABACPolicy, error) {
-	return nil, nil
-}
-
-type noopRoleStore struct{}
-
-func (noopRoleStore) Create(context.Context, *domain.Role) error                       { return nil }
-func (noopRoleStore) GetByID(context.Context, uuid.UUID, uuid.UUID) (*domain.Role, error) {
-	return nil, nil
-}
-func (noopRoleStore) GetByName(context.Context, uuid.UUID, string) (*domain.Role, error) {
-	return nil, nil
-}
-func (noopRoleStore) Update(context.Context, *domain.Role) error              { return nil }
-func (noopRoleStore) Delete(context.Context, uuid.UUID, uuid.UUID) error      { return nil }
-func (noopRoleStore) ListByOrg(context.Context, uuid.UUID) ([]*domain.Role, error) {
-	return nil, nil
-}
-
-// newTimeGatedChecker builds a PermissionChecker for the PDP: role-based check +
-// (optional) operational-hours time-gate + allow-by-default ABAC.
-func newTimeGatedChecker(tw *authz.TimeWindowEvaluator, gatedPerms []string) *authz.PermissionChecker {
-	checker := authz.NewPermissionChecker(noopEnforcer{}, authz.NewABACEvaluator(noopABACStore{}), noopRoleStore{})
-	if tw != nil {
-		checker = checker.WithTimeGate(tw, gatedPerms)
-	}
-	return checker
 }

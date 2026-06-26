@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/ihsansolusi/auth7/internal/api/grpc/authcheck"
 	"github.com/ihsansolusi/auth7/internal/api/rest"
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
 	"github.com/ihsansolusi/auth7/internal/messaging/nats"
@@ -295,6 +297,31 @@ func runStart(cmd *cobra.Command, args []string) error {
 		primaryPool.Close()
 		return nil
 	})
+
+	// ─── gRPC AuthCheck PDP server ──────────────────────────────────────────
+	// Serves auth.v1.AuthCheckService (lib7 auth7grpc contract) for PEPs
+	// (workflow7, etc.). Disabled when AUTH7_GRPC_ADDRESS is empty.
+	if grpcAddr := os.Getenv("AUTH7_GRPC_ADDRESS"); grpcAddr != "" {
+		if authCheckSrv := rest.NewAuthCheckGRPCServer(deps); authCheckSrv != nil {
+			lis, lerr := net.Listen("tcp", grpcAddr)
+			if lerr != nil {
+				logger.Error().Err(lerr).Str("addr", grpcAddr).Msg("grpc authcheck listen failed")
+			} else {
+				grpcSrv := grpc.NewServer()
+				authcheck.Register(grpcSrv, authCheckSrv)
+				go func() {
+					logger.Info().Str("addr", grpcAddr).Msg("grpc AuthCheck PDP server listening")
+					if serr := grpcSrv.Serve(lis); serr != nil {
+						logger.Error().Err(serr).Msg("grpc authcheck server exited")
+					}
+				}()
+				sm.Register("grpc-authcheck", func(ctx context.Context) error {
+					grpcSrv.GracefulStop()
+					return nil
+				})
+			}
+		}
+	}
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	httpServer := &http.Server{
