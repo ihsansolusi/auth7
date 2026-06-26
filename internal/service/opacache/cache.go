@@ -58,6 +58,27 @@ func (c *Cache) Set(key string, value interface{}) {
 	}
 }
 
+// GetOrFetch returns the cached value for key, or — on a miss — invokes fetch,
+// stores the result under key, and returns it. fetch is only called on a miss;
+// a hit short-circuits without calling it. Freshness across the cluster is
+// maintained out-of-band by the NATS policy_handler, which invalidates keys on
+// policy7.params.updated|deleted events.
+//
+// fetch errors are propagated and nothing is cached, so the next call retries.
+func (c *Cache) GetOrFetch(key string, fetch func() (interface{}, error)) (interface{}, error) {
+	if v, ok := c.Get(key); ok {
+		return v, nil
+	}
+
+	v, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+
+	c.Set(key, v)
+	return v, nil
+}
+
 func (c *Cache) Invalidate(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

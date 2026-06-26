@@ -771,6 +771,61 @@ Teller buat transaksi jam 21:00:
 
 Auth7 ONLY provides role → core7 queries policy7 for time rules.
 
+#### 13.5.1 Implementasi auth7-side (Wave S3.2 — `transaction:create`/`transaction:approve`)
+
+Selain jalur core7→policy7 di atas, **auth7 sekarang juga mengevaluasi time-window
+ABAC sendiri** untuk aksi yang ditandai *time-gated*. Ini menutup celah ketika
+keputusan otorisasi melewati `auth7` (`CheckDataAccess`/`FourLayerAuth`) tanpa
+re-check di core7.
+
+**Boundary**: auth7 hanya meng-*consume* parameter `operational_hours` sebagai
+konteks akses (allow/deny berdasarkan jam). Keputusan limit/threshold transaksi
+tetap milik policy7 (`/validate`) — auth7 tidak mereplikasi logika limit.
+
+**Alur**:
+
+1. `PermissionChecker.CheckDataAccess` → setelah RBAC permission lolos, jika
+   permission termasuk `time_gated_permissions`, panggil `TimeWindowEvaluator`.
+2. `TimeWindowEvaluator` mengambil `operational_hours` via **opacache
+   fetch-through** (key `opa:<org>:operational_hours:<branch|global>`). Miss →
+   fetch ke policy7 (`GET /v1/params/operational_hours/<name>/effective`) lalu
+   cache.
+3. NATS `policy7.params.updated|deleted` meng-*invalidate* cache (prefix
+   `opa:<org>:operational_hours`), jadi perubahan param langsung dipakai **tanpa
+   restart**.
+4. "Now" dikonversi ke timezone parameter (WIB/WITA/WIT atau IANA), dibandingkan
+   ke window hari berjalan. Di luar window → `403` deny.
+
+**Aksi yang time-gated** — *config-driven* via `policy7.time_gated_permissions`
+(bukan hardcoded). Default dev:
+
+| Permission | Alasan |
+|---|---|
+| `transaction:create` | Pembuatan transaksi finansial dibatasi jam operasional |
+| `transaction:approve` | Approval berjenjang dibatasi jam operasional |
+
+Tambah/kurangi tanpa ubah kode — cukup edit list di config.
+
+**Bentuk value `operational_hours`** yang didukung:
+
+```jsonc
+// Aggregate weekly (disarankan, mis. param "teller_operating_hours")
+{ "timezone": "WIB",
+  "weekday":  {"open":"08:00","close":"16:00"},
+  "saturday": {"open":"08:00","close":"12:00"},
+  "sunday":   null }                              // null/absent = tutup
+
+// Flat single-window (fallback per-hari, berlaku tiap hari)
+{ "timezone":"WIB", "is_open":true, "open_time":"08:00", "close_time":"15:00" }
+```
+
+**Fail-mode**: `policy7.fail_open` (default `true`) — bila policy7 tak terjangkau
+atau param hilang/tak ter-parse, akses **diizinkan** (availability-first) dengan
+warning log. Set `false` untuk strict-deny.
+
+Konfigurasi: lihat blok `policy7:` di `configs/config.yaml`. Secret
+(`api_key`) wajib via env (`${POLICY7_API_KEY}`).
+
 ### 13.6 Contoh Case: Product Access Control
 
 ```

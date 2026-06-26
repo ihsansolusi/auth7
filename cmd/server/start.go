@@ -12,17 +12,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rs/zerolog"
-	"github.com/spf13/cobra"
 	"github.com/ihsansolusi/auth7/internal/api/rest"
 	"github.com/ihsansolusi/auth7/internal/infrastructure"
 	"github.com/ihsansolusi/auth7/internal/messaging/nats"
+	"github.com/ihsansolusi/auth7/internal/policy7client"
 	"github.com/ihsansolusi/auth7/internal/service"
+	"github.com/ihsansolusi/auth7/internal/service/authz"
 	"github.com/ihsansolusi/auth7/internal/service/branchsync"
-	"github.com/ihsansolusi/auth7/internal/service/opacache"
 	"github.com/ihsansolusi/auth7/internal/service/jwt"
 	oauth2svc "github.com/ihsansolusi/auth7/internal/service/oauth2"
+	"github.com/ihsansolusi/auth7/internal/service/opacache"
 	"github.com/ihsansolusi/auth7/internal/service/password"
 	"github.com/ihsansolusi/auth7/internal/service/session"
 	"github.com/ihsansolusi/auth7/internal/store/postgres"
@@ -32,6 +31,9 @@ import (
 	"github.com/ihsansolusi/lib7-service-go/shutdown"
 	"github.com/ihsansolusi/lib7-service-go/token"
 	"github.com/ihsansolusi/lib7-service-go/tracing"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
+	"github.com/spf13/cobra"
 	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -168,6 +170,34 @@ func runStart(cmd *cobra.Command, args []string) error {
 		logger.Info().Msg("NATS event streaming disabled")
 	}
 
+	// Time-based ABAC: consume policy7 operational_hours as access context. The
+	// evaluator fetches through opaCache (fetch-through on miss; the NATS
+	// policy_handler above invalidates on policy7.params.updated|deleted).
+	var timeWindow *authz.TimeWindowEvaluator
+	if cfg.Policy7.Enabled {
+		fetcher := policy7client.New(
+			cfg.Policy7.APIURL,
+			cfg.Policy7.ServiceID,
+			cfg.Policy7.APIKey,
+			cfg.Policy7.ParamNameOrDefault(),
+		)
+		timeWindow = authz.NewTimeWindowEvaluator(
+			opaCache,
+			fetcher,
+			cfg.Policy7.DefaultTimezoneOrFallback(),
+			cfg.Policy7.FailOpen,
+			logger,
+		)
+		logger.Info().
+			Str("api_url", cfg.Policy7.APIURL).
+			Str("param", cfg.Policy7.ParamNameOrDefault()).
+			Strs("time_gated_permissions", cfg.Policy7.TimeGatedPermissions).
+			Bool("fail_open", cfg.Policy7.FailOpen).
+			Msg("time-based ABAC (policy7 operational_hours) enabled")
+	} else {
+		logger.Info().Msg("time-based ABAC (policy7 operational_hours) disabled")
+	}
+
 	jwtSvc := jwt.NewService(cfg.Service.Name, []string{cfg.Service.Name}, cfg.Token.Duration)
 	sessionStore := session.NewStore(redisClient, 8*time.Hour)
 	refreshTokenStore := session.NewRefreshTokenStore(redisClient)
@@ -186,23 +216,25 @@ func runStart(cmd *cobra.Command, args []string) error {
 	cfgForServer.API.Metrics.Enabled = false
 
 	deps := rest.ServerDeps{
-		Service:           svc,
-		DB:                primaryPool,
-		Store:             store,
-		Logger:            logger,
-		Tracer:            tracer,
-		Metrics:           metricsRegistry,
-		AuditLogger:       auditLogger,
-		TokenMaker:        tokenMaker,
-		Config:            &cfgForServer,
-		JWTSvc:            jwtSvc,
-		SessionSvc:        sessionSvc,
-		RedisClient:       redisClient,
-		OAuth2TokenSvc:    oauth2TokenSvc,
-		OAuth2ClientSvc:   oauth2ClientSvc,
-		OAuth2AuthCodeSvc: oauth2AuthCodeSvc,
-		OIDCSvc:           oidcSvc,
-		EventPub:          eventPub,
+		Service:              svc,
+		DB:                   primaryPool,
+		Store:                store,
+		Logger:               logger,
+		Tracer:               tracer,
+		Metrics:              metricsRegistry,
+		AuditLogger:          auditLogger,
+		TokenMaker:           tokenMaker,
+		Config:               &cfgForServer,
+		JWTSvc:               jwtSvc,
+		SessionSvc:           sessionSvc,
+		RedisClient:          redisClient,
+		OAuth2TokenSvc:       oauth2TokenSvc,
+		OAuth2ClientSvc:      oauth2ClientSvc,
+		OAuth2AuthCodeSvc:    oauth2AuthCodeSvc,
+		OIDCSvc:              oidcSvc,
+		EventPub:             eventPub,
+		TimeWindow:           timeWindow,
+		TimeGatedPermissions: cfg.Policy7.TimeGatedPermissions,
 	}
 	server := rest.NewServer(deps)
 
@@ -278,8 +310,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// upserts into auth7.branches. Disabled when ENTERPRISE_SOURCE_URL or ENTERPRISE_CLIENT_ID are empty.
 	{
 		pollerCfg := branchsync.DefaultConfig()
-		pollerCfg.SourceURL    = os.Getenv("ENTERPRISE_SOURCE_URL")
-		pollerCfg.ClientID     = os.Getenv("ENTERPRISE_CLIENT_ID")
+		pollerCfg.SourceURL = os.Getenv("ENTERPRISE_SOURCE_URL")
+		pollerCfg.ClientID = os.Getenv("ENTERPRISE_CLIENT_ID")
 		pollerCfg.ClientSecret = os.Getenv("ENTERPRISE_CLIENT_SECRET")
 		pollerCfg.TokenEndpoint = os.Getenv("AUTH7_TOKEN_URL")
 		if pollerCfg.TokenEndpoint == "" {
